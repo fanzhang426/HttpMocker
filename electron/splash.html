@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>HttpMocker</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f8fafd;
+        --bg-rgb: 248, 250, 253;
+        --mark-bg: linear-gradient(135deg, #46a8ff 0%, #1f7fe5 48%, #0b4fb0 100%);
+        --text: #202124;
+        --muted: #5f6368;
+        --muted-strong: #3c4043;
+        --muted-soft: #80868b;
+        --line: rgba(95, 99, 104, 0.22);
+        --accent: #1a73e8;
+        --accent-glow: rgba(26, 115, 232, 0.28);
+        --bg-overlay: linear-gradient(90deg, rgba(var(--bg-rgb), 0.96), rgba(var(--bg-rgb), 0.78) 56%, rgba(var(--bg-rgb), 0.92));
+        --mark-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 12px 26px rgba(31, 127, 229, 0.28);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #171717;
+          --bg-rgb: 23, 23, 23;
+          --mark-bg: linear-gradient(135deg, #46a8ff 0%, #1f7fe5 48%, #0b4fb0 100%);
+          --text: #e8eaed;
+          --muted: #bdc1c6;
+          --muted-strong: #e8eaed;
+          --muted-soft: #9aa0a6;
+          --line: rgba(189, 193, 198, 0.24);
+          --accent: #8ab4f8;
+          --accent-glow: rgba(138, 180, 248, 0.38);
+          --bg-overlay: linear-gradient(90deg, rgba(var(--bg-rgb), 0.96), rgba(var(--bg-rgb), 0.74) 56%, rgba(var(--bg-rgb), 0.9));
+          --mark-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        color: var(--text);
+        user-select: none;
+      }
+
+      .splash {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        padding: 34px 38px 28px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background:
+          var(--bg-overlay),
+          url("./splash-bg.svg") center / cover no-repeat;
+      }
+
+      .chrome {
+        position: absolute;
+        inset: 0;
+        border: 1px solid var(--line);
+        pointer-events: none;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .mark {
+        width: 60px;
+        height: 60px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        background: var(--mark-bg);
+        box-shadow: var(--mark-shadow);
+        overflow: hidden;
+      }
+
+      .mark svg {
+        width: 42px;
+        height: 42px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.05;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .features {
+        width: 370px;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 9px;
+        list-style: none;
+      }
+
+      .features li {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        color: var(--muted-strong);
+        font-size: 13px;
+        line-height: 1.42;
+      }
+
+      .features li::before {
+        content: "";
+        flex: 0 0 auto;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 18px var(--accent-glow);
+      }
+
+      .footer {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.45;
+      }
+
+      .version {
+        color: var(--muted-strong);
+      }
+
+      .loading {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted-soft);
+        white-space: nowrap;
+      }
+
+      .loading[hidden] {
+        display: none;
+      }
+
+      .pulse {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        animation: pulse 1.1s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.8);
+        }
+
+        50% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="splash" aria-label="HttpMocker">
+      <div class="chrome"></div>
+
+      <section class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg viewBox="0 0 1024 1024" role="img">
+            <path fill="none" stroke="#ffffff" stroke-width="94" stroke-linecap="round" d="M246 390h368"/>
+            <path fill="none" stroke="#ffffff" stroke-width="94" stroke-linecap="round" stroke-linejoin="round" d="M504 264l134 126-134 126"/>
+            <path fill="none" stroke="#dcefff" stroke-width="94" stroke-linecap="round" d="M778 634H410"/>
+            <path fill="none" stroke="#dcefff" stroke-width="94" stroke-linecap="round" stroke-linejoin="round" d="M520 508L386 634l134 126"/>
+            <circle cx="246" cy="390" r="58" fill="#ffffff"/>
+            <circle cx="778" cy="634" r="58" fill="#dcefff"/>
+            <circle cx="710" cy="256" r="38" fill="#4285f4"/>
+            <circle cx="782" cy="222" r="38" fill="#34a853"/>
+            <circle cx="852" cy="278" r="38" fill="#fbbc05"/>
+            <circle cx="796" cy="350" r="38" fill="#ea4335"/>
+            <path fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="round" stroke-opacity="0.86" d="M710 256c40-35 86-35 142 22M852 278c-29 18-43 44-56 72M710 256c32 44 54 70 86 94"/>
+          </svg>
+        </div>
+        <div>
+          <h1>HttpMocker</h1>
+          <p class="subtitle">面向移动调试的本地 HTTP 映射与拦截工具</p>
+        </div>
+      </section>
+
+      <ul class="features">
+        <li>一键保存请求结果，创建可编辑的本地映射</li>
+        <li>按查询和请求体匹配，区分同一路径的不同请求</li>
+        <li>拦截修改请求与响应，支持规则链和 AI 脚本</li>
+        <li>ADB 手机代理控制、Repeat、curl 复制和接口备注</li>
+      </ul>
+
+      <footer class="footer">
+        <div>
+          <div class="version">Version <span id="version">0.1.0</span></div>
+          <div>Copyright © 2026 HttpMocker. All rights reserved.</div>
+        </div>
+        <div id="loading" class="loading">
+          <span class="pulse" aria-hidden="true"></span>
+          正在启动服务
+        </div>
+      </footer>
+    </main>
+
+    <script>
+      const version = new URLSearchParams(window.location.search).get('version');
+      if (version) {
+        document.querySelector('#version').textContent = version;
+      }
+      if (new URLSearchParams(window.location.search).get('loading') === '0') {
+        document.querySelector('#loading').hidden = true;
+        document.querySelector('.splash').setAttribute('aria-label', '关于 HttpMocker');
+      }
+    </script>
+  </body>
+</html>

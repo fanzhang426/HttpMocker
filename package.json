@@ -1,0 +1,62 @@
+{
+  "name": "http-mocker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A developer-first HTTP mocking workbench for capturing, replaying, editing, rewriting, and AI-explaining mobile and web APIs.",
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "smoke": "node scripts/smoke-test.js",
+    "electron:dev": "electron .",
+    "dist:mac": "electron-builder --mac",
+    "pack:mac": "electron-builder --mac --dir"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "body-parser": "^1.20.3",
+    "diff": "^7.0.0",
+    "express": "^4.19.2",
+    "http-mitm-proxy": "^1.1.0",
+    "mime-types": "^2.1.35",
+    "node-pty": "^1.1.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "electron": "^42.2.0",
+    "electron-builder": "^26.8.1"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
+  },
+  "build": {
+    "appId": "com.httpmocker.app",
+    "productName": "HttpMocker",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "public/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "README.md",
+        "to": "README.md"
+      }
+    ],
+    "directories": {
+      "output": "dist-app"
+    }
+  }
+}

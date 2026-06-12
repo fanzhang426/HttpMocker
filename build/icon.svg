@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="HttpMocker">
+  <defs>
+    <linearGradient id="charles-blue" x1="174" y1="138" x2="852" y2="902" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#46a8ff"/>
+      <stop offset="0.48" stop-color="#1f7fe5"/>
+      <stop offset="1" stop-color="#0b4fb0"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="258" y1="236" x2="760" y2="792" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#dcefff" stop-opacity="0.94"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="36" flood-color="#06295c" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="214" fill="url(#charles-blue)"/>
+  <path d="M205 193C292 112 432 101 530 164C592 204 638 264 713 270C770 275 823 249 870 209C905 329 876 455 790 545C714 624 599 659 494 635C425 619 371 577 303 574C251 572 200 594 154 632C124 476 141 306 205 193Z" fill="#ffffff" opacity="0.12"/>
+  <path d="M168 816C266 706 409 668 542 706C621 728 687 775 773 758C805 752 834 739 861 722C834 832 742 914 626 942H278C230 914 191 871 168 816Z" fill="#06295c" opacity="0.16"/>
+
+  <g filter="url(#shadow)">
+    <path d="M302 402H611" fill="none" stroke="url(#glass)" stroke-width="76" stroke-linecap="round"/>
+    <path d="M513 298L624 402L513 506" fill="none" stroke="url(#glass)" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M722 622H413" fill="none" stroke="#ffffff" stroke-width="76" stroke-linecap="round"/>
+    <path d="M511 518L400 622L511 726" fill="none" stroke="#ffffff" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="302" cy="402" r="50" fill="#ffffff"/>
+    <circle cx="722" cy="622" r="50" fill="#ffffff"/>
+  </g>
+
+  <g>
+    <circle cx="713" cy="287" r="29" fill="#4285f4"/>
+    <circle cx="774" cy="259" r="29" fill="#34a853"/>
+    <circle cx="829" cy="304" r="29" fill="#fbbc05"/>
+    <circle cx="785" cy="362" r="29" fill="#ea4335"/>
+    <path d="M713 287C746 258 782 258 829 304M829 304C805 319 795 338 785 362M713 287C739 323 759 343 785 362" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" stroke-opacity="0.86"/>
+  </g>
+</svg>

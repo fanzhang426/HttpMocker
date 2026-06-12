@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="ai" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00e5ff"/>
+      <stop offset="0.42" stop-color="#8f7cff"/>
+      <stop offset="0.7" stop-color="#ff5fd2"/>
+      <stop offset="1" stop-color="#ffd166"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000" flood-opacity="0.38"/>
+    </filter>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+      .mono { font-family: "SF Mono", Menlo, Consolas, monospace; }
+      .bg { fill: #0b1020; }
+      .panel { fill: #111827; stroke: #263244; stroke-width: 1; }
+      .panel2 { fill: #0f172a; stroke: #253047; stroke-width: 1; }
+      .softPanel { fill: #151f32; stroke: #2d3a52; stroke-width: 1; }
+      .terminal { fill: #020617; stroke: #1e293b; stroke-width: 1; }
+      .muted { fill: #94a3b8; }
+      .soft { fill: #64748b; }
+      .text { fill: #e5edf9; }
+      .blueText { fill: #8ab4f8; }
+      .cyan { fill: #67e8f9; }
+      .purple { fill: #c084fc; }
+      .green { fill: #86efac; }
+      .yellow { fill: #fde68a; }
+      .danger { fill: #fca5a5; }
+      .small { font-size: 13px; }
+      .xs { font-size: 11px; }
+      .label { font-size: 13px; font-weight: 650; }
+      .title { font-size: 17px; font-weight: 760; }
+      .h1 { font-size: 25px; font-weight: 820; }
+      .code { font-size: 13px; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" class="bg"/>
+  <circle cx="120" cy="140" r="210" fill="#1a73e8" opacity="0.08"/>
+  <circle cx="1470" cy="860" r="260" fill="#9334e6" opacity="0.12"/>
+
+  <rect x="32" y="34" width="1536" height="904" rx="24" fill="#0d1424" stroke="#1f2a3d" filter="url(#shadow)"/>
+
+  <rect x="58" y="60" width="398" height="852" rx="18" class="panel"/>
+  <line x1="58" y1="124" x2="456" y2="124" stroke="#253047"/>
+  <text x="84" y="96" class="text title">Rewrite Rules</text>
+  <text x="338" y="96" class="green small">3 enabled</text>
+  <rect x="82" y="146" width="350" height="88" rx="13" fill="#17233a" stroke="#3b82f6"/>
+  <circle cx="106" cy="176" r="6" fill="#60a5fa"/>
+  <text x="124" y="181" class="text label">POST /v2/home/feed</text>
+  <text x="124" y="206" class="blueText small">AI rule · unlock feed cards</text>
+  <rect x="342" y="164" width="58" height="28" rx="14" fill="#12351f" stroke="#22c55e"/>
+  <text x="371" y="182" class="green xs" font-weight="800" text-anchor="middle">ON</text>
+
+  <rect x="82" y="250" width="350" height="76" rx="13" fill="#111827" stroke="#253047"/>
+  <circle cx="106" cy="280" r="6" fill="#60a5fa"/>
+  <text x="124" y="285" class="text label">Change response head</text>
+  <text x="124" y="308" class="muted small">content-type -> application/json</text>
+  <rect x="82" y="342" width="350" height="76" rx="13" fill="#111827" stroke="#253047"/>
+  <circle cx="106" cy="372" r="6" fill="none" stroke="#64748b" stroke-width="2"/>
+  <text x="124" y="377" class="text label">Change query</text>
+  <text x="124" y="400" class="muted small">preview=1 -> preview=0</text>
+
+  <text x="82" y="462" class="muted label">Generated summary</text>
+  <rect x="82" y="482" width="350" height="48" rx="11" fill="#f8fafc"/>
+  <text x="102" y="512" fill="#0f172a" class="label">Modify locked cards</text>
+  <text x="82" y="574" class="muted label">Rule order</text>
+  <rect x="82" y="596" width="350" height="52" rx="11" fill="#0f172a" stroke="#334155"/>
+  <text x="102" y="628" class="text small">1. AI script mutates response body</text>
+  <rect x="82" y="660" width="350" height="52" rx="11" fill="#0f172a" stroke="#334155"/>
+  <text x="102" y="692" class="text small">2. Manual header rewrite</text>
+  <rect x="82" y="724" width="350" height="52" rx="11" fill="#0f172a" stroke="#334155"/>
+  <text x="102" y="756" class="text small">3. Fallback local response</text>
+
+  <rect x="480" y="60" width="1030" height="852" rx="18" class="panel"/>
+  <line x1="480" y1="124" x2="1510" y2="124" stroke="#253047"/>
+  <text x="506" y="94" class="text title">AI Script Rule</text>
+  <text x="646" y="94" class="muted small">POST api.example.dev/v2/home/feed</text>
+  <rect x="1314" y="74" width="82" height="32" rx="10" fill="#0f172a" stroke="#334155"/>
+  <text x="1355" y="95" class="muted label" text-anchor="middle">Cancel</text>
+  <rect x="1408" y="74" width="78" height="32" rx="10" fill="url(#ai)"/>
+  <text x="1447" y="95" fill="#fff" class="label" text-anchor="middle">Save</text>
+
+  <rect x="506" y="146" width="474" height="250" rx="15" class="softPanel"/>
+  <text x="530" y="178" class="text title">Prompt</text>
+  <text x="598" y="178" class="muted small">This conversation belongs to this rule only.</text>
+  <rect x="530" y="202" width="426" height="134" rx="12" fill="#f8fafc"/>
+  <text x="550" y="236" fill="#0f172a" class="small">Unlock all feed cards, inject one test card, and</text>
+  <text x="550" y="262" fill="#0f172a" class="small">keep response headers consistent after body mutation.</text>
+  <text x="550" y="304" fill="#475569" class="small">Use the current request and sample response as context.</text>
+  <rect x="530" y="350" width="126" height="32" rx="10" fill="url(#ai)"/>
+  <text x="593" y="371" fill="#fff" class="label" text-anchor="middle">Generate</text>
+  <rect x="666" y="350" width="150" height="32" rx="10" fill="#0f172a" stroke="#334155"/>
+  <text x="741" y="371" class="muted label" text-anchor="middle">Continue chat</text>
+
+  <rect x="1002" y="146" width="484" height="250" rx="15" class="softPanel"/>
+  <text x="1026" y="178" class="text title">AI output</text>
+  <rect x="1026" y="202" width="436" height="160" rx="12" class="terminal"/>
+  <text x="1048" y="232" class="mono green code">$ codex generate-rewrite-rule</text>
+  <text x="1048" y="260" class="mono text code">Reading request context: POST /v2/home/feed</text>
+  <text x="1048" y="288" class="mono text code">Planning response_body mutation...</text>
+  <text x="1048" y="316" class="mono blueText code">Validation: sample response changed successfully</text>
+  <text x="1048" y="344" class="mono green code">Saved draft rule: Modify locked cards</text>
+  <rect x="1026" y="372" width="180" height="8" rx="4" fill="#17233a"/>
+  <rect x="1026" y="372" width="146" height="8" rx="4" fill="url(#ai)"/>
+
+  <rect x="506" y="420" width="474" height="446" rx="15" class="softPanel"/>
+  <text x="530" y="452" class="text title">Generated Python rule</text>
+  <text x="738" y="452" class="muted small">Read-only while generation is running.</text>
+  <rect x="530" y="476" width="426" height="354" rx="12" class="terminal"/>
+  <text x="552" y="506" class="mono soft code"># This script unlocks feed cards, adds a test card,</text>
+  <text x="552" y="530" class="mono soft code"># and keeps response metadata compatible with the body.</text>
+  <text x="552" y="566" class="mono purple code">def handle_response(ctx):</text>
+  <text x="576" y="594" class="mono text code">body = ctx.json()</text>
+  <text x="576" y="622" class="mono text code">items = body.get("data", {}).get("items", [])</text>
+  <text x="576" y="650" class="mono purple code">for item in items:</text>
+  <text x="600" y="678" class="mono text code">item["locked"] = False</text>
+  <text x="576" y="706" class="mono text code">items.append({"id": 999,</text>
+  <text x="662" y="734" class="mono text code">"title": "AI Injected",</text>
+  <text x="662" y="762" class="mono text code">"locked": False})</text>
+  <text x="576" y="790" class="mono green code">return ctx.with_json(body)</text>
+
+  <rect x="1002" y="420" width="484" height="446" rx="15" class="softPanel"/>
+  <text x="1026" y="452" class="text title">Validation preview</text>
+  <text x="1178" y="452" class="green small">content-length recalculated</text>
+  <g transform="translate(1026,476)">
+    <rect width="206" height="354" rx="12" class="panel2"/>
+    <rect width="206" height="34" rx="12" fill="#334155"/>
+    <text x="14" y="22" fill="#fff" class="small" font-weight="750">Before</text>
+    <text x="16" y="64" class="mono text code">{</text>
+    <text x="34" y="92" class="mono text code">"items": [</text>
+    <text x="52" y="120" class="mono text code">{ "id": 101,</text>
+    <text x="70" y="148" class="mono text code">"locked": true },</text>
+    <text x="52" y="176" class="mono text code">{ "id": 102,</text>
+    <text x="70" y="204" class="mono text code">"locked": true }</text>
+    <text x="34" y="232" class="mono text code">]</text>
+    <text x="16" y="260" class="mono text code">}</text>
+  </g>
+  <g transform="translate(1256,476)">
+    <rect width="206" height="354" rx="12" class="panel2"/>
+    <rect width="206" height="34" rx="12" fill="#1d4ed8"/>
+    <text x="14" y="22" fill="#fff" class="small" font-weight="750">After</text>
+    <text x="16" y="64" class="mono text code">{</text>
+    <text x="34" y="92" class="mono text code">"items": [</text>
+    <rect x="52" y="104" width="138" height="20" fill="#483a12"/>
+    <text x="52" y="120" class="mono yellow code">{ "id": 101,</text>
+    <text x="70" y="148" class="mono yellow code">"locked": false },</text>
+    <rect x="52" y="160" width="138" height="20" fill="#483a12"/>
+    <text x="52" y="176" class="mono yellow code">{ "id": 102,</text>
+    <text x="70" y="204" class="mono yellow code">"locked": false },</text>
+    <rect x="52" y="216" width="142" height="20" fill="#12351f"/>
+    <text x="52" y="232" class="mono green code">{ "id": 999,</text>
+    <text x="70" y="260" class="mono green code">"title": "AI",</text>
+    <text x="70" y="288" class="mono green code">"locked": false }</text>
+    <text x="34" y="316" class="mono text code">]</text>
+  </g>
+</svg>
