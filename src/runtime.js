@@ -45,7 +45,7 @@ export async function startUiRuntime() {
     uiPort: config.uiPort
   };
   const settings = await readSettings();
-  if (settings.aiNotesEnabled !== false && settings.aiProvider !== 'none' && settings.showListNotes !== false) {
+  if (settings.aiNotesEnabled !== false && settings.aiProvider !== 'none') {
     enqueueMissingCodexNotes().catch((error) => {
       console.error('Failed to enqueue missing Codex notes:', error.message);
     });

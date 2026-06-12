@@ -128,6 +128,8 @@ const terminalInstances = new Map();
 let activeTerminalInstance;
 let terminalRenamingTabId = '';
 let lastPreviewWorkspaceMouseHistory = { at: 0, delta: 0 };
+let previewWorkspaceRevealFrame = 0;
+let terminalTabRevealFrame = 0;
 let draggedPreviewWorkspaceTabId = '';
 let draggedTerminalTabId = '';
 let suppressPreviewWorkspaceTabClick = false;
@@ -467,6 +469,7 @@ const translations = {
     'settings.treeView': '树状视图',
     'settings.mergeRequests': '合并请求',
     'settings.showListNotes': '列表展示备注',
+    'settings.aiAutoNotes': 'AI 自动生成备注',
     'settings.maxHistory': '最大历史数',
     'cert.download': '下载证书',
     'tree.expand': "展开",
@@ -896,6 +899,7 @@ const translations = {
     'settings.treeView': 'Tree View',
     'settings.mergeRequests': 'Merge Requests',
     'settings.showListNotes': 'Show Notes in List',
+    'settings.aiAutoNotes': 'Auto-generate Notes with AI',
     'settings.maxHistory': 'History Limit',
     'cert.download': 'Download certificate',
     'tree.expand': "Expand",
@@ -1323,6 +1327,7 @@ const translations = {
     'settings.treeView': 'Дерево',
     'settings.mergeRequests': 'Объединять запросы',
     'settings.showListNotes': 'Показывать заметки в списке',
+    'settings.aiAutoNotes': 'Автозаметки ИИ',
     'settings.maxHistory': 'Максимум истории',
     'cert.download': 'Скачать сертификат',
     'tree.expand': 'Расширять',
@@ -1753,6 +1758,7 @@ const translations = {
     'settings.treeView': 'ट्री व्यू',
     'settings.mergeRequests': 'अनुरोध मर्ज करें',
     'settings.showListNotes': 'सूची में नोट दिखाएं',
+    'settings.aiAutoNotes': 'AI से नोट अपने-आप बनाएं',
     'settings.maxHistory': 'अधिकतम इतिहास',
     'cert.download': 'प्रमाणपत्र डाउनलोड करें',
     'tree.expand': 'बढ़ाना',
@@ -2183,6 +2189,7 @@ const translations = {
     'settings.treeView': 'Vista de árbol',
     'settings.mergeRequests': 'Combinar solicitudes',
     'settings.showListNotes': 'Mostrar notas en la lista',
+    'settings.aiAutoNotes': 'Notas automáticas con IA',
     'settings.maxHistory': 'Historial máximo',
     'cert.download': 'Descargar certificado',
     'tree.expand': 'Expandir',
@@ -2613,6 +2620,7 @@ const translations = {
     'settings.treeView': 'Baumansicht',
     'settings.mergeRequests': 'Anfragen zusammenführen',
     'settings.showListNotes': 'Notizen in Liste anzeigen',
+    'settings.aiAutoNotes': 'KI-Notizen automatisch erstellen',
     'settings.maxHistory': 'Maximaler Verlauf',
     'cert.download': 'Zertifikat herunterladen',
     'tree.expand': 'Expandieren',
@@ -3043,6 +3051,7 @@ const translations = {
     'settings.treeView': 'Vue arborescente',
     'settings.mergeRequests': 'Fusionner les requêtes',
     'settings.showListNotes': 'Afficher les notes dans la liste',
+    'settings.aiAutoNotes': 'Notes IA automatiques',
     'settings.maxHistory': 'Historique maximal',
     'cert.download': 'Télécharger le certificat',
     'tree.expand': 'Développer',
@@ -3473,6 +3482,7 @@ const translations = {
     'settings.treeView': 'عرض شجري',
     'settings.mergeRequests': 'دمج الطلبات',
     'settings.showListNotes': 'عرض الملاحظات في القائمة',
+    'settings.aiAutoNotes': 'إنشاء ملاحظات AI تلقائيًا',
     'settings.maxHistory': 'الحد الأقصى للسجل',
     'cert.download': 'تحميل الشهادة',
     'tree.expand': 'يوسع',
@@ -3903,6 +3913,7 @@ const translations = {
     'settings.treeView': 'ツリー表示',
     'settings.mergeRequests': 'リクエストをマージ',
     'settings.showListNotes': '一覧にメモを表示',
+    'settings.aiAutoNotes': 'AIでメモを自動生成',
     'settings.maxHistory': '履歴の最大件数',
     'cert.download': '証明書をダウンロード',
     'tree.expand': "展開",
@@ -4330,6 +4341,7 @@ const translations = {
     'settings.treeView': '트리 보기',
     'settings.mergeRequests': '요청 병합',
     'settings.showListNotes': '목록에 메모 표시',
+    'settings.aiAutoNotes': 'AI 메모 자동 생성',
     'settings.maxHistory': '최대 기록 수',
     'cert.download': '인증서 다운로드',
     'tree.expand': "펼치기",
@@ -4675,6 +4687,7 @@ const els = {
   captureTreeViewEnabled: document.querySelector('#capture-tree-view-enabled'),
   captureMergeEnabled: document.querySelector('#capture-merge-enabled'),
   showListNotes: document.querySelector('#show-list-notes'),
+  aiNotesEnabled: document.querySelector('#ai-notes-enabled'),
   maxRecentRequests: document.querySelector('#max-recent-requests'),
   closeSettingsBtn: document.querySelector('#close-settings-btn'),
   aiStatusDialog: document.querySelector('#ai-status-dialog'),
@@ -4728,7 +4741,7 @@ window.addEventListener('http-mocker-preview-history-forward', () => {
   switchPreviewWorkspaceTabHistory(1);
 });
 window.addEventListener('http-mocker-close-active-tab', () => {
-  closeActiveWorkspaceTabForShortcut(document.activeElement, { force: true });
+  closeActiveWorkspaceTabForShortcut(document.activeElement, { force: true, preferPreview: true });
 });
 window.addEventListener('popstate', handlePreviewWorkspaceBrowserHistory);
 window.addEventListener('pagehide', closeBackgroundConnections);
@@ -5347,6 +5360,7 @@ els.appearanceSelect?.addEventListener('change', saveAppearanceSetting);
 els.captureTreeViewEnabled.addEventListener('change', saveSettingsDialog);
 els.captureMergeEnabled.addEventListener('change', saveSettingsDialog);
 els.showListNotes.addEventListener('change', saveSettingsDialog);
+els.aiNotesEnabled?.addEventListener('change', saveSettingsDialog);
 els.maxRecentRequests?.addEventListener('change', saveSettingsDialog);
 els.maxRecentRequests?.addEventListener('blur', saveSettingsDialog);
 els.maxRecentRequests?.addEventListener('keydown', (event) => {
@@ -5435,7 +5449,7 @@ document.addEventListener('contextmenu', (event) => {
 }, true);
 document.addEventListener('keydown', (event) => {
   if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'w') {
-    const handled = closeActiveWorkspaceTabForShortcut(event.target);
+    const handled = closeActiveWorkspaceTabForShortcut(event.target, { preferPreview: !event.target?.closest?.('.terminal-xterm') });
     if (handled) {
       event.preventDefault();
       return;
@@ -5604,6 +5618,7 @@ async function initSettingsWindow() {
   const result = await getJson('/api/settings');
   state.captureMergeEnabled = result.settings?.captureMergeEnabled !== false;
   state.captureTreeViewEnabled = result.settings?.captureTreeViewEnabled === true;
+  state.aiNotesEnabled = result.settings?.aiNotesEnabled !== false;
   state.showListNotes = result.settings?.showListNotes !== false;
   state.maxRecentRequests = normalizeMaxRecentRequests(result.settings?.maxRecentRequests);
   state.language = normalizeLanguage(result.settings?.language);
@@ -5612,6 +5627,7 @@ async function initSettingsWindow() {
   applyLanguage({ staticOnly: true });
   syncSettingsDialogControls();
   els.showListNotes.checked = state.showListNotes;
+  if (els.aiNotesEnabled) els.aiNotesEnabled.checked = state.aiNotesEnabled !== false;
   hideStartupBlocker();
 }
 
@@ -5786,6 +5802,7 @@ function rememberWorkspaceFocus(kind) {
 
 function focusTerminalTabs() {
   if (els.terminalTabs && !els.terminalTabs.hidden && els.terminalTabs.offsetParent !== null) {
+    revealActiveTerminalTab();
     els.terminalTabs.focus({ preventScroll: true });
   }
 }
@@ -5863,6 +5880,21 @@ function clearTabDropTargets(container, selector) {
   container?.querySelectorAll?.(`${selector}.is-drop-target`).forEach((item) => {
     item.classList.remove('is-drop-target');
   });
+}
+
+function revealTabInScrollContainer(container, tabElement, padding = 8) {
+  if (!container || !tabElement || container.hidden || container.offsetParent === null) return false;
+  const tabRect = tabElement.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  if (tabRect.left < containerRect.left + padding) {
+    container.scrollLeft = Math.max(0, container.scrollLeft - (containerRect.left + padding - tabRect.left));
+    return true;
+  }
+  if (tabRect.right > containerRect.right - padding) {
+    container.scrollLeft = Math.max(0, container.scrollLeft + (tabRect.right - (containerRect.right - padding)));
+    return true;
+  }
+  return false;
 }
 
 function renderTerminalTabs() {
@@ -5974,6 +6006,26 @@ function renderTerminalTabs() {
     });
     els.terminalTabs.append(button);
   }
+  scheduleRevealActiveTerminalTab();
+}
+
+function scheduleRevealActiveTerminalTab() {
+  window.cancelAnimationFrame(terminalTabRevealFrame);
+  terminalTabRevealFrame = window.requestAnimationFrame(() => {
+    revealActiveTerminalTab();
+    terminalTabRevealFrame = window.requestAnimationFrame(() => {
+      terminalTabRevealFrame = 0;
+      revealActiveTerminalTab();
+    });
+  });
+}
+
+function revealActiveTerminalTab() {
+  const terminalState = ensureActiveTerminalState();
+  const activeTab = terminalState.activeId
+    ? els.terminalTabs?.querySelector?.(`.terminal-tab[data-terminal-tab-id="${cssEscape(terminalState.activeId)}"]`)
+    : els.terminalTabs?.querySelector?.('.terminal-tab.active');
+  return revealTabInScrollContainer(els.terminalTabs, activeTab, 8);
 }
 
 function reorderTerminalTab(sourceId, targetId) {
@@ -6833,6 +6885,11 @@ function handleWorkspacePointerDown(event) {
   }
   if (event.target?.closest?.('.preview-panel')) {
     rememberWorkspaceFocus('preview');
+    if (!isTextEntryElement(event.target)) {
+      window.requestAnimationFrame(() => {
+        focusPreviewWorkspaceTabs();
+      });
+    }
   }
 }
 
@@ -7344,11 +7401,7 @@ async function selectFirstVisibleItemForActiveTab() {
 
 function visibleCapturesForActiveWorkspace() {
   const primaryCaptures = filterCaptures(state.captures, state.captureFilter);
-  return filterCaptures(primaryCaptures, state.displayFilter, { scope: 'secondary', includeNote: shouldCaptureFilterIncludeNotes() });
-}
-
-function shouldCaptureFilterIncludeNotes() {
-  return state.captureTreeViewEnabled !== true && state.showListNotes !== false;
+  return filterCaptures(primaryCaptures, state.displayFilter, { scope: 'secondary', includeNote: true });
 }
 
 function captureContainsId(capture = {}, captureId = '') {
@@ -8795,7 +8848,7 @@ function renderCaptureWorkspaceTabs() {
 
 function captureTabCounts(tab) {
   const primaryCaptures = filterCaptures(state.captures, String(tab?.filter || ''));
-  const filteredCaptures = filterCaptures(primaryCaptures, String(tab?.displayFilter || ''), { scope: 'secondary', includeNote: shouldCaptureFilterIncludeNotes() });
+  const filteredCaptures = filterCaptures(primaryCaptures, String(tab?.displayFilter || ''), { scope: 'secondary', includeNote: true });
   return {
     primary: primaryCaptures.length,
     visible: filteredCaptures.length,
@@ -10115,7 +10168,7 @@ function adbErrorMessage(error) {
 
 function renderCaptures() {
   const primaryCaptures = filterCaptures(state.captures, state.captureFilter);
-  const filteredCaptures = filterCaptures(primaryCaptures, state.displayFilter, { scope: 'secondary', includeNote: shouldCaptureFilterIncludeNotes() });
+  const filteredCaptures = filterCaptures(primaryCaptures, state.displayFilter, { scope: 'secondary', includeNote: true });
   const domain = currentProjectDomain();
   const nextSignature = captureRenderSignature(primaryCaptures, filteredCaptures, domain);
   if (state.captureRenderSignature === nextSignature && els.captures.children.length) return;
@@ -13213,6 +13266,8 @@ async function saveSettingsDialog() {
   const language = normalizeLanguage(els.languageSelect?.value || state.language);
   const appearance = normalizeAppearance(els.appearanceSelect?.value || state.appearance);
   const maxRecentRequests = normalizeMaxRecentRequests(els.maxRecentRequests?.value || state.maxRecentRequests);
+  const aiNotesEnabled = els.aiNotesEnabled ? els.aiNotesEnabled.checked : state.aiNotesEnabled !== false;
+  const previousAiNotesEnabled = state.aiNotesEnabled !== false;
   if (els.maxRecentRequests) {
     els.maxRecentRequests.value = String(maxRecentRequests);
   }
@@ -13220,10 +13275,12 @@ async function saveSettingsDialog() {
     state.language = language;
     state.appearance = appearance;
     state.maxRecentRequests = maxRecentRequests;
+    state.aiNotesEnabled = aiNotesEnabled;
     applyLanguage();
     applyAppearance();
     await setCaptureTreeViewEnabled(treeViewEnabled);
-    await patchJson('/api/settings', { language, appearance, maxRecentRequests });
+    await patchJson('/api/settings', { language, appearance, maxRecentRequests, aiNotesEnabled });
+    await syncAiNotesWorkFromSettings(previousAiNotesEnabled, aiNotesEnabled);
     return;
   }
   const previousShouldMerge = shouldMergeCaptureList();
@@ -13231,6 +13288,7 @@ async function saveSettingsDialog() {
     captureTreeViewEnabled: treeViewEnabled,
     language,
     appearance,
+    aiNotesEnabled,
     maxRecentRequests
   };
   if (!treeViewEnabled) {
@@ -13245,6 +13303,7 @@ async function saveSettingsDialog() {
   }
   state.language = language;
   state.appearance = appearance;
+  state.aiNotesEnabled = aiNotesEnabled;
   state.maxRecentRequests = maxRecentRequests;
   applyLanguage();
   applyAppearance();
@@ -13255,6 +13314,7 @@ async function saveSettingsDialog() {
     renderCaptures();
   }
   await patchJson('/api/settings', patch);
+  await syncAiNotesWorkFromSettings(previousAiNotesEnabled, aiNotesEnabled);
   if (pageMode !== 'settings') {
     if (previousShouldMerge !== shouldMergeCaptureList()) {
       await reloadCaptures({ replace: true });
@@ -13263,6 +13323,23 @@ async function saveSettingsDialog() {
     }
     renderRules();
     renderRemoteRules();
+  }
+}
+
+async function syncAiNotesWorkFromSettings(previousEnabled, nextEnabled) {
+  if (previousEnabled === nextEnabled) return;
+  const url = nextEnabled ? '/api/codex-notes/start' : '/api/codex-notes/stop';
+  try {
+    const result = await postJson(url, {});
+    if (result?.settings) {
+      state.aiProvider = result.settings.aiProvider || state.aiProvider;
+      state.aiNotesEnabled = result.settings.aiNotesEnabled !== false;
+    }
+    if (result?.status) state.codexQueue = result.status;
+    renderAiSelector();
+    renderAiStatusDialog();
+  } catch (error) {
+    console.error(error);
   }
 }
 
@@ -13297,6 +13374,7 @@ function syncSettingsDialogControls() {
   els.captureTreeViewEnabled.checked = state.captureTreeViewEnabled === true;
   els.captureMergeEnabled.checked = state.captureMergeEnabled !== false;
   els.showListNotes.checked = state.showListNotes !== false;
+  if (els.aiNotesEnabled) els.aiNotesEnabled.checked = state.aiNotesEnabled !== false;
   els.captureMergeEnabled.disabled = state.captureTreeViewEnabled === true;
   els.showListNotes.disabled = state.captureTreeViewEnabled === true;
   renderCaptureViewModeButton();
@@ -14727,6 +14805,7 @@ function renderPreviewWorkspaceTabs() {
     });
     els.previewWorkspaceTabs.append(button);
   }
+  scheduleRevealActivePreviewWorkspaceTab();
 }
 
 function reorderPreviewWorkspaceTab(sourceId, targetId) {
@@ -14742,6 +14821,7 @@ function reorderPreviewWorkspaceTab(sourceId, targetId) {
 function focusPreviewWorkspaceTabs() {
   const activeTab = els.previewWorkspaceTabs?.querySelector?.('.preview-workspace-tab.active');
   if (activeTab) {
+    revealActivePreviewWorkspaceTab(activeTab);
     activeTab.focus({ preventScroll: true });
     return true;
   }
@@ -14754,6 +14834,21 @@ function focusPreviewWorkspaceTabs() {
     return true;
   }
   return false;
+}
+
+function scheduleRevealActivePreviewWorkspaceTab() {
+  window.cancelAnimationFrame(previewWorkspaceRevealFrame);
+  previewWorkspaceRevealFrame = window.requestAnimationFrame(() => {
+    revealActivePreviewWorkspaceTab();
+    previewWorkspaceRevealFrame = window.requestAnimationFrame(() => {
+      previewWorkspaceRevealFrame = 0;
+      revealActivePreviewWorkspaceTab();
+    });
+  });
+}
+
+function revealActivePreviewWorkspaceTab(tabElement = els.previewWorkspaceTabs?.querySelector?.('.preview-workspace-tab.active')) {
+  return revealTabInScrollContainer(els.previewWorkspaceTabs, tabElement, 8);
 }
 
 function restorePreviewWorkspaceFocus() {
@@ -14912,6 +15007,7 @@ function handlePreviewWorkspaceBrowserHistory(event) {
     state.suppressPreviewTabVisit = false;
     state.suppressBrowserPreviewHistory = false;
   }
+  scheduleRevealActivePreviewWorkspaceTab();
 }
 
 function switchPreviewWorkspaceTabHistory(delta) {
@@ -14929,6 +15025,7 @@ function switchPreviewWorkspaceTabHistory(delta) {
     state.suppressPreviewTabVisit = false;
   }
   syncBrowserPreviewHistory({ replace: true });
+  scheduleRevealActivePreviewWorkspaceTab();
   return true;
 }
 
@@ -14946,10 +15043,14 @@ function shouldHandlePreviewWorkspaceHistoryShortcut(target, options = {}) {
 function closeActiveWorkspaceTabForShortcut(target, options = {}) {
   if (isTextEntryElement(target) && options.force !== true) return false;
   if (els.globalSearchDialog?.open || els.settingsDialog?.open || els.noteDialog?.open) return false;
-  const preferTerminal = state.lastWorkspaceFocus === 'terminal';
   const targetInTerminal = els.terminalPanel?.contains(target);
   const targetInPreview = els.previewPanel?.contains(target);
-  if ((preferTerminal || targetInTerminal) && !targetInPreview) {
+  const targetInTerminalBody = Boolean(target?.closest?.('.terminal-xterm'));
+  if (options.preferPreview === true && state.activePreviewTabId && (!targetInTerminalBody || state.lastWorkspaceFocus !== 'terminal')) {
+    closePreviewWorkspaceTab(state.activePreviewTabId);
+    return true;
+  }
+  if (targetInTerminal && !targetInPreview) {
     const terminalState = ensureActiveTerminalState();
     if (!terminalState.open || !terminalState.activeId) return false;
     closeTerminalTab(terminalState.activeId).catch((error) => {
@@ -14978,6 +15079,7 @@ function selectPreviewWorkspaceTab(tabId, options = {}) {
   if (!tab) return;
   rememberWorkspaceFocus('preview');
   state.activePreviewTabId = tab.id;
+  scheduleRevealActivePreviewWorkspaceTab();
   if (options.remember !== false) {
     rememberPreviewWorkspaceTabVisit(tab.id);
   }

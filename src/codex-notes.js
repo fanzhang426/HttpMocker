@@ -73,7 +73,6 @@ export async function enqueueCodexNote(capture, options = {}) {
   const force = Boolean(options.force);
   const settings = (await readState()).settings || {};
   if (settings.aiNotesEnabled === false) return false;
-  if (settings.showListNotes === false) return false;
   if (settings.aiProvider === 'none') return false;
 
   const tabs = Array.isArray(settings.captureTabs) ? settings.captureTabs : [];
@@ -116,8 +115,6 @@ export async function enqueueCodexNote(capture, options = {}) {
 }
 
 export async function retryCodexNotesForCaptures(captures = []) {
-  const settings = (await readState()).settings || {};
-  if (settings.showListNotes === false) return { queued: 0, status: codexQueueStatus() };
   let queued = 0;
   state.failed = 0;
   state.lastError = '';
@@ -133,7 +130,6 @@ export async function retryCodexNotesForCaptures(captures = []) {
 export async function enqueueMissingCodexNotes() {
   const store = await readState();
   if (store.settings?.aiNotesEnabled === false) return { queued: 0, status: codexQueueStatus() };
-  if (store.settings?.showListNotes === false) return { queued: 0, status: codexQueueStatus() };
   const captures = await readCaptures();
   const rules = Array.isArray(store.rules) ? store.rules.map(captureLikeForNoteQueue) : [];
   const remoteRules = Array.isArray(store.remoteRules)

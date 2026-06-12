@@ -266,10 +266,6 @@ function attachEditMenuTracking(browserWindow) {
     handlePanelShortcutInput(event, browserWindow, input);
     scheduleEditMenuStateRefresh(browserWindow);
   });
-  webContents.on('before-mouse-event', (event, input) => {
-    handlePanelShortcutMouse(event, browserWindow, input);
-    scheduleEditMenuStateRefresh(browserWindow);
-  });
   webContents.on('context-menu', (_event, params) => {
     const state = normalizeEditMenuState({
       canUndo: params.editFlags?.canUndo && params.isEditable,
@@ -338,26 +334,6 @@ function handlePanelShortcutInput(event, browserWindow, input = {}) {
       console.error(error);
     });
   }
-}
-
-function handlePanelShortcutMouse(event, browserWindow, input = {}) {
-  if (!browserWindow || browserWindow.isDestroyed()) return;
-  if (browserWindow !== panelWindow) return;
-  const button = String(input.button || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const type = String(input.type || '');
-  const isBack = ['back', 'browserback', 'browserbackward', 'x1', 'xbutton1', 'mouse4', 'button3', 'button4'].includes(button);
-  const isForward = ['forward', 'browserforward', 'x2', 'xbutton2', 'mouse5', 'button5'].includes(button);
-  if (!isBack && !isForward) return;
-  if (type && type !== 'mouseDown') {
-    event.preventDefault();
-    return;
-  }
-  event.preventDefault();
-  dispatchPanelEvent(isBack
-    ? 'http-mocker-preview-history-back'
-    : 'http-mocker-preview-history-forward').catch((error) => {
-    console.error(error);
-  });
 }
 
 function scheduleEditMenuStateRefresh(browserWindow, delayMs = 20) {

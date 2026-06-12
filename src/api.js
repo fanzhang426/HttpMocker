@@ -572,7 +572,6 @@ export function createApiServer(runtimeControls = {}) {
   app.post('/api/codex-notes/stop', async (_req, res, next) => {
     try {
       stopCodexNotes();
-      await stopAiRuleJobs();
       const settings = await updateState((state) => {
         state.settings = {
           ...state.settings,

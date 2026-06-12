@@ -1254,7 +1254,6 @@ body.resizing-terminal {
   border-color: color-mix(in srgb, var(--accent) 62%, transparent);
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--code-text);
-  box-shadow: 0 1px 0 var(--workspace-tab-active-bg);
 }
 
 .terminal-tab.is-dragging,
@@ -2443,7 +2442,6 @@ body.resizing-workspace {
 .preview-workspace-tab.active {
   border-color: color-mix(in srgb, var(--accent) 62%, transparent);
   background: color-mix(in srgb, var(--accent) 22%, transparent);
-  box-shadow: 0 1px 0 var(--workspace-tab-active-bg);
 }
 
 .preview-workspace-tab-title {
