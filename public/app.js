@@ -68,6 +68,7 @@ const state = {
   restoringRemoteExampleScroll: false,
   remotePreviewRefreshing: false,
   remoteSteps: [],
+  remoteStepSummaryFocus: null,
   selectedDslStepId: '',
   selectedAiStepId: '',
   remoteAiDrafts: {},
@@ -99,6 +100,7 @@ const state = {
   globalSearchExpandedKeys: new Set(),
   // Stores history groups manually expanded by the user; groups default to collapsed.
   collapsedHistoryGroups: new Set(),
+  expandedRuleHitCaptures: new Set(),
   codexFailureSeenAt: 0,
   codexFailureSignature: '',
   aiNotesEnabled: false,
@@ -124,6 +126,7 @@ const state = {
 let settingsSaveTimer;
 let terminalResizeTimer;
 let terminalModulesPromise;
+let renderingRemoteDslRows = false;
 const terminalInstances = new Map();
 let activeTerminalInstance;
 let terminalRenamingTabId = '';
@@ -232,6 +235,7 @@ const translations = {
     'local.listAria': '本地映射列表',
     'local.actionTip': '保存当前响应为本地映射；后续匹配请求会直接返回这份本地内容。',
     'local.empty': '还没有本地映射。先在最近请求里配置一条本地映射。',
+    'rule.hitCaptures': '命中的请求',
     'remote.listAria': '拦截修改列表',
     'remote.actionTip': '创建拦截修改配置，可在代理转发时修改查询、Head、请求体或响应体。',
     'remote.globalEnabled': '启用全局规则',
@@ -662,6 +666,7 @@ const translations = {
     'local.listAria': 'Local mock list',
     'local.actionTip': 'Save the current response as a local mock. Matching requests will return this local content directly.',
     'local.empty': 'No local mocks yet. Create one from Recent Requests.',
+    'rule.hitCaptures': 'Matched requests',
     'remote.listAria': 'Rewrite rule list',
     'remote.actionTip': 'Create rewrite rules that can modify query, headers, request body, or response body while proxying.',
     'remote.globalEnabled': 'Enable global rule',
@@ -1091,6 +1096,7 @@ const translations = {
     'local.listAria': 'Локальный список макетов',
     'local.actionTip': 'Сохраните текущий ответ как локальный макет. Соответствующие запросы будут возвращать этот локальный контент напрямую.',
     'local.empty': 'Местных издевательств пока нет. Создайте его из последних запросов.',
+    'rule.hitCaptures': 'Matched requests',
     'remote.listAria': 'Переписать список правил',
     'remote.actionTip': 'Создайте правила перезаписи, которые могут изменять запрос, заголовки, текст запроса или текст ответа во время проксирования.',
     'remote.globalEnabled': 'Включить глобальное правило',
@@ -1522,6 +1528,7 @@ const translations = {
     'local.listAria': 'स्थानीय मॉक सूची',
     'local.actionTip': 'वर्तमान प्रतिक्रिया को स्थानीय मॉक के रूप में सहेजें। मिलान अनुरोध इस स्थानीय सामग्री को सीधे वापस कर देंगे।',
     'local.empty': 'अभी तक कोई स्थानीय मॉक नहीं. हाल के अनुरोधों में से एक बनाएं.',
+    'rule.hitCaptures': 'Matched requests',
     'remote.listAria': 'नियम सूची पुनः लिखें',
     'remote.actionTip': 'पुनर्लेखन नियम बनाएं जो प्रॉक्सी करते समय क्वेरी, हेडर, अनुरोध बॉडी या प्रतिक्रिया बॉडी को संशोधित कर सकते हैं।',
     'remote.globalEnabled': 'वैश्विक नियम सक्षम करें',
@@ -1953,6 +1960,7 @@ const translations = {
     'local.listAria': 'Lista simulada local',
     'local.actionTip': 'Guarde la respuesta actual como una simulación local. Las solicitudes coincidentes devolverán este contenido local directamente.',
     'local.empty': 'Aún no hay burlas locales. Cree uno a partir de Solicitudes recientes.',
+    'rule.hitCaptures': 'Solicitudes coincidentes',
     'remote.listAria': 'Reescribir la lista de reglas',
     'remote.actionTip': 'Cree reglas de reescritura que puedan modificar la consulta, los encabezados, el cuerpo de la solicitud o el cuerpo de la respuesta durante el proxy.',
     'remote.globalEnabled': 'Habilitar regla global',
@@ -2384,6 +2392,7 @@ const translations = {
     'local.listAria': 'Lokale Mock-Liste',
     'local.actionTip': 'Speichern Sie die aktuelle Antwort als lokalen Mock. Bei Matching-Anfragen wird dieser lokale Inhalt direkt zurückgegeben.',
     'local.empty': 'Noch keine lokalen Mocks. Erstellen Sie eine aus den letzten Anfragen.',
+    'rule.hitCaptures': 'Treffende Anfragen',
     'remote.listAria': 'Regelliste neu schreiben',
     'remote.actionTip': 'Erstellen Sie Rewrite-Regeln, die beim Proxying Abfragen, Header, Anforderungstext oder Antworttext ändern können.',
     'remote.globalEnabled': 'Globale Regel aktivieren',
@@ -2815,6 +2824,7 @@ const translations = {
     'local.listAria': 'Liste fictive locale',
     'local.actionTip': 'Enregistrez la réponse actuelle en tant que simulation locale. Les demandes correspondantes renverront directement ce contenu local.',
     'local.empty': 'Pas encore de moqueries locales. Créez-en une à partir des demandes récentes.',
+    'rule.hitCaptures': 'Requêtes correspondantes',
     'remote.listAria': 'Réécrire la liste des règles',
     'remote.actionTip': 'Créez des règles de réécriture qui peuvent modifier la requête, les en-têtes, le corps de la demande ou le corps de la réponse lors du proxy.',
     'remote.globalEnabled': 'Activer la règle globale',
@@ -3246,6 +3256,7 @@ const translations = {
     'local.listAria': 'قائمة وهمية محلية',
     'local.actionTip': 'احفظ الاستجابة الحالية كنموذج محلي. ستعيد الطلبات المطابقة هذا المحتوى المحلي مباشرةً.',
     'local.empty': 'لا يوجد سخرية محلية حتى الآن. قم بإنشاء واحد من الطلبات الأخيرة.',
+    'rule.hitCaptures': 'الطلبات المطابقة',
     'remote.listAria': 'إعادة كتابة قائمة القواعد',
     'remote.actionTip': 'قم بإنشاء قواعد إعادة الكتابة التي يمكنها تعديل الاستعلام أو الرؤوس أو نص الطلب أو نص الاستجابة أثناء إنشاء الوكيل.',
     'remote.globalEnabled': 'تمكين القاعدة العالمية',
@@ -3677,6 +3688,7 @@ const translations = {
     'local.listAria': 'ローカルモック一覧',
     'local.actionTip': '現在のレスポンスをローカルモックとして保存します。一致したリクエストにはこのローカル内容を直接返します。',
     'local.empty': 'ローカルモックはまだありません。最近のリクエストから作成してください。',
+    'rule.hitCaptures': '命中したリクエスト',
     'remote.listAria': 'リライトルール一覧',
     'remote.actionTip': 'プロキシ転送中にクエリ、ヘッダー、リクエスト本文、レスポンス本文を変更するルールを作成します。',
     'remote.globalEnabled': 'グローバルルールを有効化',
@@ -4105,6 +4117,7 @@ const translations = {
     'local.listAria': '로컬 목 목록',
     'local.actionTip': '현재 응답을 로컬 목으로 저장합니다. 일치하는 요청은 이 로컬 내용을 바로 반환합니다.',
     'local.empty': '아직 로컬 목이 없습니다. 최근 요청에서 하나를 만드세요.',
+    'rule.hitCaptures': '매칭된 요청',
     'remote.listAria': '리라이트 규칙 목록',
     'remote.actionTip': '프록시 전달 중 쿼리, 헤더, 요청 본문, 응답 본문을 수정하는 규칙을 만듭니다.',
     'remote.globalEnabled': '전역 규칙 활성화',
@@ -6273,13 +6286,15 @@ function disposeTerminalInstancesForCaptureTab(tab) {
   disposeTerminalInstancesForProject(`project-${tabIdentity}-${cwdIdentity}`);
 }
 
-function updateTerminalAfterProjectSwitch() {
+function updateTerminalAfterProjectSwitch(options = {}) {
   applyTerminalPanelState();
   const terminalState = ensureActiveTerminalState();
   if (!terminalState.open) return;
   ensureTerminalForActiveProject().then((instance) => {
     fitTerminal(instance);
-    instance?.xterm?.focus();
+    if (options.focus === true && !isTextEntryElement(document.activeElement)) {
+      instance?.xterm?.focus();
+    }
   }).catch((error) => {
     console.error(error);
   });
@@ -7651,6 +7666,7 @@ async function handleCapturesChangedEvent(data = {}) {
   if (data.mode === 'append' && data.capture) {
     mergeCaptureSummary(data.capture);
     renderCaptures();
+    renderSelectedRuleHitCaptures();
     return;
   }
   if (data.mode === 'clear') {
@@ -7662,6 +7678,7 @@ async function handleCapturesChangedEvent(data = {}) {
     clearPreview();
     renderPreviewWorkspaceTabs();
     renderCaptures();
+    renderSelectedRuleHitCaptures();
     return;
   }
   await reloadCaptures({
@@ -7855,8 +7872,49 @@ async function reloadCaptures(options = {}) {
     : mergeCaptureSnapshot(result.captures || []);
   prunePreviewWorkspaceTabs({ selectReplacement: false });
   renderCaptures();
+  renderSelectedRuleHitCaptures();
   renderPreviewWorkspaceTabs();
   restorePreviewWorkspaceActiveSelection();
+}
+
+function renderSelectedRuleHitCaptures() {
+  if (state.activeTab === 'rules' && state.selectedRuleId) {
+    renderSelectedRuleHitCaptureBlock('local', state.selectedRuleId);
+    return;
+  }
+  if (state.activeTab === 'remote' && state.selectedRemoteRuleId) {
+    renderSelectedRuleHitCaptureBlock('remote', state.selectedRemoteRuleId);
+  }
+}
+
+function renderSelectedRuleHitCaptureBlock(kind, ruleId) {
+  if (!ruleId) return;
+  const list = kind === 'local' ? els.rules : els.remoteRules;
+  const rules = kind === 'local' ? state.rules : state.remoteRules;
+  const rule = rules.find((item) => item.id === ruleId);
+  const item = list?.querySelector?.(`.rule[data-rule-id="${cssEscape(ruleId)}"]`);
+  const layout = item?.querySelector?.('.rule-layout');
+  if (!rule || !item || !layout) {
+    if (kind === 'local') renderRules();
+    else renderRemoteRules();
+    return;
+  }
+  const existing = layout.querySelector('.rule-hit-captures');
+  const html = ruleHitCaptureListHtml(rule, kind);
+  if (!html) {
+    existing?.remove();
+    return;
+  }
+  const template = document.createElement('template');
+  template.innerHTML = html.trim();
+  const next = template.content.firstElementChild;
+  if (!next) return;
+  if (existing) {
+    existing.replaceWith(next);
+  } else {
+    layout.append(next);
+  }
+  bindRuleHitCaptureItems(item, rule.id, kind);
 }
 
 function shouldMergeCaptureList() {
@@ -8102,6 +8160,7 @@ function mergeRemoteStepsForDraft(serverSteps = [], localSteps = []) {
   const serverById = new Map(serverSteps.map((step) => [step.id, step]));
   const summaryFocused = document.activeElement === els.remoteAiSummary;
   const scriptFocused = document.activeElement === els.remoteAiScript;
+  const listSummaryEdit = currentRemoteStepSummaryEdit();
   return localSteps.map((localStep) => {
     const serverStep = serverById.get(localStep.id);
     if (!serverStep || localStep.type !== 'ai') {
@@ -8116,9 +8175,14 @@ function mergeRemoteStepsForDraft(serverSteps = [], localSteps = []) {
     const keepLocalScript = scriptFocused &&
       localStep.id === state.selectedAiStepId &&
       !isAiStepGenerating(serverStep);
+    const keepListSummary = listSummaryEdit?.rowId === localStep.id;
     return {
       ...localStep,
-      summary: keepLocalSummary ? localStep.summary : (serverStep.summary || localStep.summary || ''),
+      summary: keepListSummary
+        ? normalizeAiSummary(listSummaryEdit.value)
+        : keepLocalSummary
+          ? localStep.summary
+          : (serverStep.summary || localStep.summary || ''),
       pythonScript: keepLocalScript ? (localStep.pythonScript || '') : (serverStep.pythonScript ?? localStep.pythonScript ?? ''),
       aiOutputLines: Array.isArray(serverStep.aiOutputLines) ? [...serverStep.aiOutputLines] : [],
       aiPromptHistory: Array.isArray(serverStep.aiPromptHistory) ? [...serverStep.aiPromptHistory] : [],
@@ -8146,6 +8210,7 @@ function syncSelectedRemoteRuleFromState() {
   if (!state.selectedRemoteRuleId) return;
   const rule = state.remoteRules.find((item) => item.id === state.selectedRemoteRuleId);
   if (!rule) return;
+  const listSummaryEdit = currentRemoteStepSummaryEdit();
   const currentAiStepId = state.selectedAiStepId;
   const currentDslStepId = state.selectedDslStepId;
   const activeStep = selectedAiStep();
@@ -8169,6 +8234,14 @@ function syncSelectedRemoteRuleFromState() {
     value: els.remoteDslValue?.value ?? activeDslStep.value ?? ''
   } : null;
   state.remoteSteps = parseRemoteScriptForEditor(rule.script, rule);
+  if (listSummaryEdit?.rowId) {
+    const step = state.remoteSteps.find((item) => item.id === listSummaryEdit.rowId);
+    if (step?.type === 'ai') {
+      step.summary = normalizeAiSummary(listSummaryEdit.value);
+    } else if (step) {
+      step.note = listSummaryEdit.value;
+    }
+  }
   if (currentAiStepId && state.remoteSteps.some((step) => step.id === currentAiStepId && step.type === 'ai')) {
     state.selectedAiStepId = currentAiStepId;
     const step = selectedAiStep();
@@ -11885,7 +11958,8 @@ function renderRules() {
 
 function renderLocalRuleItem(rule) {
   const item = document.createElement('article');
-  item.className = `rule${rule.id === state.selectedRuleId ? ' active' : ''}`;
+  const selected = rule.id === state.selectedRuleId;
+  item.className = `rule${selected ? ' active' : ''}`;
   item.dataset.ruleId = rule.id || '';
   const summaryHtml = shouldShowRuleMatchSummary(rule) ? ruleMatchSummaryHtml(rule) : '';
   item.innerHTML = `
@@ -11897,6 +11971,7 @@ function renderLocalRuleItem(rule) {
         </div>
         ${summaryHtml}
       </div>
+      ${selected ? ruleHitCaptureListHtml(rule, 'local') : ''}
     </div>
   `;
 
@@ -11911,6 +11986,7 @@ function renderLocalRuleItem(rule) {
       handleSelectableTextClick(event, rule.id === state.selectedRuleId, () => selectRuleFromList(rule.id, els.rules));
     });
   });
+  bindRuleHitCaptureItems(item, rule.id, 'local');
   return item;
 }
 
@@ -12004,7 +12080,8 @@ function renderGlobalRemoteRuleItem(rule) {
 
 function renderRemoteRuleItem(rule) {
   const item = document.createElement('article');
-  item.className = `rule${rule.id === state.selectedRemoteRuleId ? ' active' : ''}`;
+  const selected = rule.id === state.selectedRemoteRuleId;
+  item.className = `rule${selected ? ' active' : ''}`;
   item.dataset.ruleId = rule.id || '';
   const summaryHtml = shouldShowRuleMatchSummary(rule) ? ruleMatchSummaryHtml(rule) : '';
   item.innerHTML = `
@@ -12016,6 +12093,7 @@ function renderRemoteRuleItem(rule) {
         </div>
         ${summaryHtml}
       </div>
+      ${selected ? ruleHitCaptureListHtml(rule, 'remote') : ''}
     </div>
   `;
 
@@ -12030,7 +12108,125 @@ function renderRemoteRuleItem(rule) {
       handleSelectableTextClick(event, rule.id === state.selectedRemoteRuleId, () => selectRemoteRuleFromList(rule.id, els.remoteRules));
     });
   });
+  bindRuleHitCaptureItems(item, rule.id, 'remote');
   return item;
+}
+
+function ruleHitCaptureListHtml(rule, kind) {
+  const captures = ruleHitCaptures(rule, kind);
+  if (!captures.length) return '';
+  const key = ruleHitCaptureKey(kind, rule.id);
+  const expanded = state.expandedRuleHitCaptures.has(key);
+  return `
+    <div class="rule-hit-captures" aria-label="${escapeHtml(t('capture.historyAria'))}">
+      <button class="capture-history-label rule-hit-captures-label" type="button" data-rule-hit-key="${escapeHtml(key)}" aria-expanded="${String(expanded)}">
+        <span>${escapeHtml(t('rule.hitCaptures'))} · ${escapeHtml(t(expanded ? 'capture.collapse' : 'capture.expand'))}</span>
+      </button>
+      <div class="rule-hit-capture-list"${expanded ? '' : ' hidden'}>
+        ${captures.map((capture) => `
+          <button class="capture-history-item rule-hit-capture${capture.id === state.selectedCaptureId ? ' active' : ''}" type="button" data-capture-id="${escapeHtml(capture.id)}">
+            <span class="capture-history-line"></span>
+            <span class="rule-hit-capture-main">
+              <span class="request-line">${requestLineHtml(capture, { target: requestTarget(capture), includeStatus: true })}</span>
+            </span>
+            <span class="capture-time-row">
+              <span class="capture-time-text">${escapeHtml(new Date(capture.createdAt).toLocaleTimeString())}</span>
+            </span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindRuleHitCaptureItems(container, ruleId, kind) {
+  container.querySelector('.rule-hit-captures-label')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleRuleHitCaptures(ruleHitCaptureKey(kind, ruleId));
+  });
+  container.querySelectorAll('.rule-hit-capture').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      previewRuleHitCapture(button.dataset.captureId, ruleId, kind).catch((error) => {
+        console.error(error);
+      });
+    });
+  });
+}
+
+function ruleHitCaptureKey(kind, ruleId) {
+  return `${kind}:${ruleId || ''}`;
+}
+
+function toggleRuleHitCaptures(key) {
+  if (!key) return;
+  if (state.expandedRuleHitCaptures.has(key)) {
+    state.expandedRuleHitCaptures.delete(key);
+  } else {
+    state.expandedRuleHitCaptures.add(key);
+  }
+  renderRules();
+  renderRemoteRules();
+}
+
+function ruleHitCaptures(rule, kind) {
+  if (!rule?.id) return [];
+  const captures = [];
+  for (const capture of state.captures) {
+    for (const item of captureGroupItems(capture)) {
+      if (captureMatchesRuleHit(item, rule.id, kind)) {
+        captures.push(item);
+      }
+    }
+  }
+  return captures.sort((a, b) => captureTimestamp(b) - captureTimestamp(a));
+}
+
+function captureGroupItems(capture = {}) {
+  return [
+    capture,
+    ...(Array.isArray(capture.history)
+      ? capture.history.map((item) => captureHistoryItemWithGroupContext(capture, item))
+      : [])
+  ].filter((item) => item?.id);
+}
+
+function captureHistoryItemWithGroupContext(capture = {}, item = {}) {
+  return {
+    ...capture,
+    ...item,
+    mapType: item.mapType || '',
+    mapRuleId: item.mapRuleId || '',
+    mapRuleIds: Array.isArray(item.mapRuleIds) ? item.mapRuleIds : []
+  };
+}
+
+function captureMatchesRuleHit(capture = {}, ruleId, kind) {
+  if (kind === 'local') {
+    return capture.mapType === 'local' && capture.mapRuleId === ruleId;
+  }
+  const ids = new Set([
+    capture.mapRuleId,
+    ...(Array.isArray(capture.mapRuleIds) ? capture.mapRuleIds : [])
+  ].filter(Boolean));
+  return capture.mapType === 'remote' && ids.has(ruleId);
+}
+
+async function previewRuleHitCapture(captureId, ruleId, kind) {
+  if (!captureId || !ruleId) return;
+  const expectedRuleId = kind === 'local' ? state.selectedRuleId : state.selectedRemoteRuleId;
+  if (expectedRuleId !== ruleId) {
+    if (kind === 'local') {
+      await selectRule(ruleId);
+    } else {
+      await selectRemoteRule(ruleId);
+    }
+  }
+  await selectCapture(captureId, { keepSelectedRule: true });
+  state.selectedRuleId = kind === 'local' ? ruleId : null;
+  state.selectedRemoteRuleId = kind === 'remote' ? ruleId : null;
+  renderRules();
+  renderRemoteRules();
 }
 
 function renderRuleGroups(container, rules, renderItem) {
@@ -12132,6 +12328,16 @@ function remoteRuleSummary(rule) {
 }
 
 function renderRemoteDslRows() {
+  const summaryFocus = currentRemoteStepSummaryEdit();
+  if (summaryFocus?.rowId) {
+    const row = state.remoteSteps.find((item) => item.id === summaryFocus.rowId);
+    if (row) applyRemoteStepSummaryEdit(row, summaryFocus.value);
+  }
+  if (summaryFocus?.composing && document.activeElement?.classList?.contains('remote-step-list-summary')) {
+    return;
+  }
+
+  renderingRemoteDslRows = true;
   els.remoteDslList.innerHTML = '';
 
   if (!state.remoteSteps.length) {
@@ -12139,6 +12345,7 @@ function renderRemoteDslRows() {
     emptyState.className = 'remote-dsl-empty';
     emptyState.textContent = t('remote.emptySteps');
     els.remoteDslList.append(emptyState);
+    renderingRemoteDslRows = false;
     return;
   }
 
@@ -12149,8 +12356,11 @@ function renderRemoteDslRows() {
     item.draggable = false;
 
     const dragHandle = document.createElement('button');
-    dragHandle.className = 'remote-dsl-drag';
+    dragHandle.className = `remote-dsl-drag${row.type === 'ai' ? ' remote-dsl-ai-drag' : ''}`;
     dragHandle.type = 'button';
+    if (row.type === 'ai') {
+      dragHandle.textContent = 'AI';
+    }
     setInstantTooltip(dragHandle, t('remote.dragSort'));
     dragHandle.setAttribute('aria-label', t('remote.dragSort'));
     dragHandle.addEventListener('pointerdown', () => {
@@ -12183,6 +12393,8 @@ function renderRemoteDslRows() {
     els.remoteDslList.append(item);
   }
   attachRemoteStepDragHandlers();
+  renderingRemoteDslRows = false;
+  restoreRemoteStepSummaryFocus(summaryFocus);
 }
 
 function createRemoteStepEnabledControl(row, item) {
@@ -12232,6 +12444,7 @@ function createRemoteStepSummaryInput(row, fallback) {
   const summary = document.createElement('input');
   summary.className = 'remote-step-list-summary';
   summary.type = 'text';
+  summary.dataset.rowId = row.id || '';
   summary.autocomplete = 'off';
   summary.spellcheck = false;
   summary.value = remoteStepSummaryText(row, fallback);
@@ -12241,8 +12454,24 @@ function createRemoteStepSummaryInput(row, fallback) {
   summary.addEventListener('click', (event) => {
     event.stopPropagation();
   });
+  summary.addEventListener('focus', () => {
+    rememberRemoteStepSummaryFocus(summary);
+  });
+  summary.addEventListener('compositionstart', () => {
+    summary.dataset.composing = 'true';
+    rememberRemoteStepSummaryFocus(summary, { composing: true });
+  });
+  summary.addEventListener('compositionend', () => {
+    summary.dataset.composing = 'false';
+    rememberRemoteStepSummaryFocus(summary, { composing: false });
+    scheduleRuleAutoSave();
+  });
+  summary.addEventListener('select', () => {
+    rememberRemoteStepSummaryFocus(summary);
+  });
   summary.addEventListener('input', (event) => {
     event.stopPropagation();
+    rememberRemoteStepSummaryFocus(summary);
     if (row.type === 'ai') {
       row.summary = normalizeAiSummary(summary.value);
       if (row.id === state.selectedAiStepId && !els.remoteAiEditor.hidden) {
@@ -12254,12 +12483,87 @@ function createRemoteStepSummaryInput(row, fallback) {
         els.remoteDslSummary.value = row.note || '';
       }
     }
+    if (event.isComposing || summary.dataset.composing === 'true') return;
     scheduleRuleAutoSave();
   });
   summary.addEventListener('keydown', (event) => {
     event.stopPropagation();
   });
+  summary.addEventListener('keyup', () => {
+    rememberRemoteStepSummaryFocus(summary);
+  });
+  summary.addEventListener('blur', () => {
+    if (renderingRemoteDslRows) return;
+    const rowId = summary.dataset.rowId || '';
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (active?.classList?.contains('remote-step-list-summary')) return;
+      if (state.remoteStepSummaryFocus?.rowId === rowId) {
+        state.remoteStepSummaryFocus = null;
+      }
+    }, 0);
+  });
   return summary;
+}
+
+function applyRemoteStepSummaryEdit(row, value) {
+  if (!row) return;
+  if (row.type === 'ai') {
+    row.summary = normalizeAiSummary(value);
+    return;
+  }
+  row.note = value;
+}
+
+function currentRemoteStepSummaryEdit() {
+  const active = document.activeElement;
+  if (active?.classList?.contains('remote-step-list-summary')) {
+    return captureRemoteStepSummaryFocus(active);
+  }
+  return state.remoteStepSummaryFocus?.rowId ? { ...state.remoteStepSummaryFocus } : null;
+}
+
+function captureRemoteStepSummaryFocus(input) {
+  const value = input?.value || '';
+  const start = Number.isFinite(input?.selectionStart) ? input.selectionStart : value.length;
+  const end = Number.isFinite(input?.selectionEnd) ? input.selectionEnd : start;
+  const previous = state.remoteStepSummaryFocus;
+  const rowId = input?.dataset?.rowId || '';
+  return {
+    rowId,
+    value,
+    selectionStart: Math.max(0, Math.min(start, value.length)),
+    selectionEnd: Math.max(0, Math.min(end, value.length)),
+    composing: input?.dataset?.composing === 'true' || (previous?.rowId === rowId && previous.composing === true)
+  };
+}
+
+function rememberRemoteStepSummaryFocus(input, patch = {}) {
+  state.remoteStepSummaryFocus = {
+    ...captureRemoteStepSummaryFocus(input),
+    ...patch
+  };
+}
+
+function restoreRemoteStepSummaryFocus(snapshot) {
+  if (!snapshot?.rowId || !els.remoteDslList) return;
+  window.requestAnimationFrame(() => {
+    const input = els.remoteDslList.querySelector(`.remote-step-list-summary[data-row-id="${cssEscape(snapshot.rowId)}"]`);
+    if (!input) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== input && !els.remoteDslList.contains(active)) return;
+    input.focus({ preventScroll: true });
+    const length = input.value.length;
+    const start = Math.max(0, Math.min(snapshot.selectionStart ?? length, length));
+    const end = Math.max(0, Math.min(snapshot.selectionEnd ?? start, length));
+    input.setSelectionRange(start, end);
+    state.remoteStepSummaryFocus = {
+      ...snapshot,
+      value: input.value,
+      selectionStart: start,
+      selectionEnd: end
+    };
+  });
 }
 
 function createRemoteStepDeleteButton(row, title) {
@@ -14447,12 +14751,16 @@ async function saveLocal(captureId, queryMode) {
   await selectRule(result.rule.id);
 }
 
-async function selectCapture(captureId) {
+async function selectCapture(captureId, options = {}) {
   clearManualRuleSaveRequired();
   openCapturePreviewTab(captureId);
   if (state.previewMode === 'capture' && state.selectedCaptureId === captureId && state.selectedCaptureDetail?.id === captureId) {
     renderPreviewWorkspaceTabs();
     renderCaptures();
+    if (options.keepSelectedRule === true) {
+      renderRules();
+      renderRemoteRules();
+    }
     return;
   }
   const tabState = activePreviewTabState();
@@ -14462,13 +14770,21 @@ async function selectCapture(captureId) {
   }
   const requestId = state.captureSelectRequestId + 1;
   state.captureSelectRequestId = requestId;
+  const keepSelectedRule = options.keepSelectedRule === true ? state.selectedRuleId : null;
+  const keepSelectedRemoteRule = options.keepSelectedRule === true ? state.selectedRemoteRuleId : null;
   state.selectedCaptureId = captureId;
-  state.selectedRuleId = null;
-  state.selectedRemoteRuleId = null;
+  if (options.keepSelectedRule !== true) {
+    state.selectedRuleId = null;
+    state.selectedRemoteRuleId = null;
+  }
   state.selectedCaptureDetail = null;
   state.previewRequest = null;
   const summary = selectedCaptureSummary();
   renderPendingCapturePreview(summary, { preserveCurrentTab: preserveCapturePreviewTab });
+  if (options.keepSelectedRule === true) {
+    state.selectedRuleId = keepSelectedRule;
+    state.selectedRemoteRuleId = keepSelectedRemoteRule;
+  }
   renderCaptures();
   renderRules();
   renderRemoteRules();
@@ -14483,6 +14799,10 @@ async function selectCapture(captureId) {
   }
   if (requestId !== state.captureSelectRequestId) return;
   state.selectedCaptureDetail = result;
+  if (options.keepSelectedRule === true) {
+    state.selectedRuleId = keepSelectedRule;
+    state.selectedRemoteRuleId = keepSelectedRemoteRule;
+  }
   const mergeOptions = captureMergeOptionsForCapture(result);
 
   setGlobalRemoteHeadEditorVisible(false);
@@ -15286,6 +15606,7 @@ async function selectRule(ruleId) {
   clearManualRuleSaveRequired();
   const rule = state.rules.find((item) => item.id === ruleId);
   if (!rule) return;
+  state.expandedRuleHitCaptures.clear();
   openRulePreviewTab(ruleId, 'rule');
   state.selectedRuleId = ruleId;
   state.selectedRemoteRuleId = null;
@@ -15337,6 +15658,7 @@ async function selectRemoteRule(ruleId) {
   clearManualRuleSaveRequired();
   const rule = state.remoteRules.find((item) => item.id === ruleId);
   if (!rule) return;
+  state.expandedRuleHitCaptures.clear();
   openRulePreviewTab(ruleId, 'remote');
   state.selectedRemoteRuleId = ruleId;
   state.selectedRuleId = null;

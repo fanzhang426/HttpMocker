@@ -2188,9 +2188,8 @@ body.resizing-workspace {
 }
 
 .rule-layout {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -2234,6 +2233,45 @@ body.resizing-workspace {
   flex: 1 1 auto;
   font-size: 14px;
   line-height: 1.35;
+}
+
+.rule-hit-captures {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.rule-hit-captures-label {
+  cursor: pointer;
+}
+
+.rule-hit-captures-label:hover {
+  color: var(--text);
+}
+
+.rule-hit-capture-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rule-hit-capture-list[hidden] {
+  display: none;
+}
+
+.rule-hit-capture.capture-history-item {
+  grid-template-columns: minmax(28px, 1fr) minmax(0, auto) 8ch;
+  height: 22px;
+}
+
+.rule-hit-capture-main {
+  min-width: 0;
+}
+
+.rule-hit-capture .request-line {
+  display: block;
+  color: inherit;
 }
 
 .rule-enabled-dot {
@@ -3772,6 +3810,17 @@ button.danger-button:hover {
 
 .remote-ai-step-row .remote-dsl-drag {
   color: var(--ai-text);
+}
+
+.remote-dsl-ai-drag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.remote-dsl-ai-drag::before,
+.remote-dsl-ai-drag::after {
+  content: none;
 }
 
 .remote-dsl-drag:hover {
