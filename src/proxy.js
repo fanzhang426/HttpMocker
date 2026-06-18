@@ -12,6 +12,7 @@ import { enqueueCodexNote } from './codex-notes.js';
 import {
   bodyHash,
   buildCapture,
+  compareRuleSpecificity,
   filterResponseHeaders,
   findRule,
   hashRequestBody
@@ -157,7 +158,7 @@ export function startProxy() {
           requestBodyHash: bodyHash(Buffer.alloc(0))
         });
 
-        if (rule) {
+        if (rule && !remoteRulesOverrideLocalRule(rule, remoteRules)) {
           ctx.localProxy = {};
           await sendLocalResponse(ctx, rule, request);
           return;
@@ -242,28 +243,41 @@ export function startProxy() {
       });
 
       if (rule) {
-        ctx.localProxy.localHit = true;
-        const requestForCapture = {
+        const competingRemoteRules = findRemoteRules(orderRemoteRules(state.remoteRules || []), {
           ...(ctx.localProxy.originalRequest || ctx.localProxy.request),
+          requestBodyHash,
           bodyBuffer: requestBodyBuffer,
-          bodyTruncated: Boolean(ctx.localProxy.requestTruncated)
-        };
-        await sendLocalResponse(ctx, rule, requestForCapture);
-        ctx.proxyToServerRequest.removeAllListeners('error');
-        ctx.proxyToServerRequest.on('error', () => {});
-        ctx.proxyToServerRequest.end = () => {};
-        ctx.proxyToServerRequest.destroy();
-        callback();
-        return;
+          requestContentType: headerValue(ctx.localProxy.request.headers, 'content-type')
+        }, { requireBodyMatch: true });
+        if (remoteRulesOverrideLocalRule(rule, competingRemoteRules)) {
+          ctx.localProxy.remoteRules = competingRemoteRules;
+          ctx.localProxy.remoteCommands = splitRemoteCommands(competingRemoteRules);
+          ctx.localProxy.remoteHit = competingRemoteRules.length > 0;
+          ctx.localProxy.remoteRuleIds = competingRemoteRules.map((item) => item.id).filter(Boolean);
+        } else {
+          ctx.localProxy.localHit = true;
+          const requestForCapture = {
+            ...(ctx.localProxy.originalRequest || ctx.localProxy.request),
+            bodyBuffer: requestBodyBuffer,
+            bodyTruncated: Boolean(ctx.localProxy.requestTruncated)
+          };
+          await sendLocalResponse(ctx, rule, requestForCapture);
+          ctx.proxyToServerRequest.removeAllListeners('error');
+          ctx.proxyToServerRequest.on('error', () => {});
+          ctx.proxyToServerRequest.end = () => {};
+          ctx.proxyToServerRequest.destroy();
+          callback();
+          return;
+        }
       }
 
-      const remoteRules = findRemoteRules(orderRemoteRules(state.remoteRules || []), {
+      const remoteRules = ctx.localProxy.remoteRules || findRemoteRules(orderRemoteRules(state.remoteRules || []), {
         ...(ctx.localProxy.originalRequest || ctx.localProxy.request),
         requestBodyHash,
         bodyBuffer: requestBodyBuffer,
         requestContentType: headerValue(ctx.localProxy.request.headers, 'content-type')
       }, { requireBodyMatch: true });
-      const remoteCommands = splitRemoteCommands(remoteRules);
+      const remoteCommands = ctx.localProxy.remoteCommands || splitRemoteCommands(remoteRules);
       const originalRequestForDiff = {
         url: ctx.localProxy.request.url,
         headers: { ...(ctx.localProxy.request.headers || {}) },
@@ -741,6 +755,13 @@ function formatBodySnapshot(buffer, contentType = '') {
 function preferredRemoteMapRuleId(remoteRules = [], remoteRuleIds = []) {
   const regularRule = (remoteRules || []).find((rule) => rule?.scope !== 'global' && rule?.id);
   return regularRule?.id || remoteRuleIds?.[0] || '';
+}
+
+function remoteRulesOverrideLocalRule(localRule, remoteRules = []) {
+  return (remoteRules || []).some((rule) => (
+    rule?.scope !== 'global' &&
+    compareRuleSpecificity(rule, localRule) < 0
+  ));
 }
 
 async function applyRemoteRulesInOrder({

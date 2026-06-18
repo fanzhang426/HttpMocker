@@ -94,10 +94,11 @@ function numberOrNull(value) {
 }
 
 export function createRuleFromCapture(capture, options = {}) {
+  const id = crypto.randomUUID();
   const extension = extensionForCapture(capture);
-  const filePath = buildLocalFilePath(capture, extension);
+  const filePath = buildLocalFilePath({ ...capture, localFileId: id }, extension);
   return {
-    id: crypto.randomUUID(),
+    id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     enabled: true,
@@ -131,7 +132,7 @@ export function findRule(rules, request) {
   const method = request.method.toUpperCase();
   const query = parsed.search ? parsed.search.slice(1) : '';
 
-  return rules.find((rule) => {
+  return orderRulesBySpecificity(rules).find((rule) => {
     if (!rule.enabled) return false;
     if (rule.method !== '*' && rule.method.toUpperCase() !== method) return false;
     if (rule.protocol && rule.protocol !== protocol) return false;
@@ -144,6 +145,67 @@ export function findRule(rules, request) {
 
     return true;
   });
+}
+
+export function orderRulesBySpecificity(rules = []) {
+  return (rules || [])
+    .map((rule, index) => ({ rule, index }))
+    .sort((a, b) => compareRuleSpecificity(a.rule, b.rule) || a.index - b.index)
+    .map((item) => item.rule);
+}
+
+export function compareRuleSpecificity(a, b) {
+  const aCoversB = ruleCoversRule(a, b);
+  const bCoversA = ruleCoversRule(b, a);
+  if (aCoversB && !bCoversA) return 1;
+  if (bCoversA && !aCoversB) return -1;
+  return ruleSpecificity(b) - ruleSpecificity(a);
+}
+
+function ruleCoversRule(containerRule = {}, containedRule = {}) {
+  if (!sameRuleBaseOrCovers(containerRule, containedRule)) return false;
+  if (!ruleQueryCovers(containerRule, containedRule)) return false;
+  if (!ruleBodyCovers(containerRule, containedRule)) return false;
+  return true;
+}
+
+function sameRuleBaseOrCovers(containerRule = {}, containedRule = {}) {
+  const containerMethod = String(containerRule.method || '').toUpperCase();
+  const containedMethod = String(containedRule.method || '').toUpperCase();
+  if (containerMethod !== '*' && containerMethod !== containedMethod) return false;
+  if (containerRule.protocol && containedRule.protocol && containerRule.protocol !== containedRule.protocol) return false;
+  if (containerRule.host !== containedRule.host) return false;
+  if (Number(containerRule.port) !== Number(containedRule.port)) return false;
+  return containerRule.path === containedRule.path;
+}
+
+function ruleQueryCovers(containerRule = {}, containedRule = {}) {
+  if (containerRule.queryMode === 'ignore') return true;
+  if (containedRule.queryMode === 'ignore') return false;
+  return queryIncludesRequired(containedRule.query || '', containerRule.query || '');
+}
+
+function ruleBodyCovers(containerRule = {}, containedRule = {}) {
+  if (!shouldMatchRuleRequestBody(containerRule, containerRule.method)) return true;
+  if (!shouldMatchRuleRequestBody(containedRule, containedRule.method)) return false;
+  return requestBodyIncludesRequired(containerRule, {
+    method: containedRule.method,
+    headers: containedRule.requestContentType ? { 'content-type': containedRule.requestContentType } : containedRule.requestHeaders,
+    requestContentType: containedRule.requestContentType || '',
+    requestBodyHash: containedRule.requestBodyHash || '',
+    bodyBuffer: ruleRequestBodyBuffer(containedRule)
+  }, containedRule.method);
+}
+
+export function ruleSpecificity(rule = {}) {
+  let score = 0;
+  if (rule.queryMode !== 'ignore') {
+    score += paramsToEntries(rule.query || '').length * 1000;
+  }
+  if (shouldMatchRuleRequestBody(rule, rule.method)) {
+    score += requestBodySpecificity(rule);
+  }
+  return score;
 }
 
 export function bodyForEditor(capture) {
@@ -274,7 +336,7 @@ export function ruleTargetKey(rule) {
 
 export function ruleLocalFilePath(rule) {
   const extension = path.extname(rule.filePath || '') || extensionForCapture(rule);
-  return buildLocalFilePath(rule, extension);
+  return buildLocalFilePath({ ...rule, localFileId: rule.id }, extension);
 }
 
 function bodyBufferForEditor({ bodyBase64, contentType, editable, emptyText = '(empty response body)', binaryNote }) {
@@ -398,10 +460,12 @@ function buildLocalFilePath(capture, extension) {
   const requestBodyHash = methodHasRequestBody(capture.method) && capture.requestBodyHash
     ? `-${capture.requestBodyHash.slice(0, 8)}`
     : '';
+  const localFileId = String(capture.localFileId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 8);
+  const localFileSuffix = localFileId ? `-${localFileId}` : '';
   return path.posix.join(
     capture.host,
     capture.method.toUpperCase(),
-    `${slug}${queryHash}${requestBodyHash}${extension}`
+    `${slug}${queryHash}${requestBodyHash}${localFileSuffix}${extension}`
   );
 }
 
@@ -545,6 +609,29 @@ function ruleRequestBodyBuffer(rule) {
 
 function ruleHasStructuredRequestBody(rule) {
   return Boolean(rule?.requestBodyBase64) || !Number(rule?.requestBodySize || 0);
+}
+
+function requestBodySpecificity(rule = {}) {
+  const buffer = ruleRequestBodyBuffer(rule);
+  if (!buffer.length && Number(rule.requestBodySize || 0) > 0) return 1;
+  const text = buffer.toString('utf8');
+  const contentType = String(rule.requestContentType || headerValue(rule.requestHeaders || {}, 'content-type') || '').toLowerCase();
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    return paramsToEntries(text).length * 100;
+  }
+  const parsed = parseJson(text);
+  if (parsed.ok) return countJsonSpecificity(parsed.value) * 100;
+  return Math.max(1, text.length);
+}
+
+function countJsonSpecificity(value) {
+  if (Array.isArray(value)) {
+    return value.reduce((sum, item) => sum + countJsonSpecificity(item), value.length);
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).reduce((sum, item) => sum + countJsonSpecificity(item), Object.keys(value).length);
+  }
+  return 1;
 }
 
 function parseJson(text) {

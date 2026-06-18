@@ -91,6 +91,7 @@ const state = {
   adbStatusTimer: null,
   adbTrackSource: null,
   adbTrackReconnectTimer: null,
+  adbDeviceMenuOpen: false,
   adbGuidePromptDeviceId: '',
   adbGuideKnownDeviceIds: new Set(),
   globalSearchQuery: '',
@@ -137,6 +138,9 @@ let draggedPreviewWorkspaceTabId = '';
 let draggedTerminalTabId = '';
 let suppressPreviewWorkspaceTabClick = false;
 let suppressTerminalTabClick = false;
+let previewTextSelectionDrag = null;
+const previewPaneCache = new Map();
+let activePreviewPaneCacheKey = '';
 const shownRuleWarnings = new Map();
 const pageMode = new URLSearchParams(window.location.search).get('settings') === '1' ? 'settings' : 'main';
 const autoSaveDelayMs = 500;
@@ -152,12 +156,99 @@ const terminalHeightMaxRatio = 0.45;
 const remoteExampleSplitStorageKey = 'httpMockerRemoteExampleSplitRatio';
 const remoteExampleSplitMinEditor = 140;
 const remoteExampleSplitMinExample = 130;
+const collapsibleJsonPreviewMaxChars = 80 * 1024;
 const maxRecentRequestsMin = 50;
 const maxRecentRequestsMax = 5000;
 const maxRecentRequestsDefault = 500;
 const supportedLanguages = new Set(['zh-CN', 'en', 'ja', 'ko', 'ru', 'hi', 'es', 'de', 'fr', 'ar']);
 const rtlLanguages = new Set(['ar']);
 const supportedAppearances = new Set(['system', 'light', 'dark']);
+const previewPaneSelectors = {
+  editorTitle: '#editor-title',
+  editorPath: '#editor-path',
+  editorNote: '#editor-note',
+  analyzeNoteBtn: '#analyze-note-btn',
+  askAiBtn: '#ask-ai-btn',
+  captureQueryEditor: '#capture-query-editor',
+  captureQueryInput: '#capture-query-input',
+  captureQueryPreview: '#capture-query-preview',
+  captureQueryOriginal: '#capture-query-original',
+  captureMergeQueryRow: '#capture-query-merge-row',
+  captureMergeQuery: '#capture-merge-query',
+  captureBodyMergeEditor: '#capture-body-merge-editor',
+  captureMergeBodyRow: '#capture-merge-body-row',
+  captureMergeBody: '#capture-merge-body',
+  ruleOptionEditor: '#rule-option-editor',
+  ruleOptionQuery: '#rule-option-query',
+  ruleOptionBodyRow: '#rule-option-body-row',
+  ruleOptionBody: '#rule-option-body',
+  ruleOptionEnabled: '#rule-option-enabled',
+  ruleBodyMatchEditor: '#rule-body-match-editor',
+  responseBodyToolbar: '#response-body-toolbar',
+  previewTabs: '#preview-tabs',
+  captureTimeDisplay: '#capture-time-display',
+  overviewTab: '#overview-tab',
+  requestHeadTab: '#request-head-tab',
+  responseHeadTab: '#response-head-tab',
+  queryTab: '#query-tab',
+  responseBodyTab: '#response-body-tab',
+  requestBodyTab: '#request-body-tab',
+  formatBodyBtn: '#format-body-btn',
+  manualRuleSaveBtn: '#manual-rule-save-btn',
+  ruleQueryEditor: '#rule-query-editor',
+  ruleQueryInput: '#rule-query-input',
+  remoteRuleEditor: '#remote-rule-editor',
+  globalRemoteRuleEditor: '#global-remote-head-editor',
+  globalRemoteHostInput: '#global-remote-host-input',
+  globalRemoteEnabled: '#global-remote-enabled',
+  remoteDslEditor: '#remote-dsl-editor',
+  remoteDslStepEditor: '#remote-dsl-step-editor',
+  remoteDslBackBtn: '#remote-dsl-back-btn',
+  remoteDslSummary: '#remote-dsl-summary',
+  remoteDslEnabled: '#remote-dsl-enabled',
+  remoteDslAction: '#remote-dsl-action',
+  remoteDslPath: '#remote-dsl-path',
+  remoteDslValue: '#remote-dsl-value',
+  remoteAiEditor: '#remote-ai-editor',
+  remoteAiBackBtn: '#remote-ai-back-btn',
+  remoteAiSummary: '#remote-ai-summary',
+  remoteAiEnabled: '#remote-ai-enabled',
+  remoteAiPrompt: '#remote-ai-prompt',
+  remoteAiGenerateBtn: '#remote-ai-generate-btn',
+  remoteAiStatus: '#remote-ai-status',
+  remoteAiOutput: '#remote-ai-output',
+  remoteAiScriptHighlight: '#remote-ai-script-highlight',
+  remoteAiScript: '#remote-ai-script',
+  remoteRuleToolbar: '#remote-rule-toolbar',
+  remoteDslList: '#remote-dsl-list',
+  remoteExampleDivider: '.remote-example-divider',
+  remoteExampleDividerLabel: '.remote-example-divider span',
+  remoteRuleLower: '.remote-rule-lower',
+  remoteExampleRequestTab: '#remote-example-request-tab',
+  remoteExampleResponseTab: '#remote-example-response-tab',
+  remoteExampleRequestHeadTab: '#remote-example-request-head-tab',
+  remoteExampleResponseHeadTab: '#remote-example-response-head-tab',
+  remoteExampleQueryTab: '#remote-example-query-tab',
+  remoteExamplePreview: '#remote-example-preview',
+  remoteExampleDiff: '#remote-example-diff',
+  remoteRuleHelpBtn: '#remote-rule-help-btn',
+  addRemoteRuleBtn: '#add-remote-rule-btn',
+  remoteAddMenu: '#remote-add-menu',
+  addRemoteDslBtn: '#add-remote-dsl-btn',
+  remoteAiRuleBtn: '#remote-ai-rule-btn',
+  bodyEditorStack: '#body-editor-stack',
+  captureBodyOriginal: '#capture-body-original',
+  captureBodyDivider: '#capture-body-divider',
+  editor: '#body-editor',
+  bodyHighlight: '#body-highlight',
+  captureOverview: '#capture-overview',
+  captureDiffView: '#capture-diff-view',
+  previewFindBar: '#preview-find-bar',
+  previewFindInput: '#preview-find-input',
+  previewFindCount: '#preview-find-count',
+  previewFindPrev: '#preview-find-prev',
+  previewFindNext: '#preview-find-next'
+};
 const translations = {
   'zh-CN': {
     'startup.title': 'HttpMocker 正在准备面板',
@@ -482,7 +573,7 @@ const translations = {
     'tree.expandAll': "全部展开",
     'tree.collapseAll': "全部收起",
     'context.updateLocal': "更新本地映射",
-    'context.createLocal': "配置为本地映射",
+    'context.createLocal': "设置为本地映射",
     'context.updateRemote': "更新拦截修改",
     'context.createRemote': "配置为拦截修改",
     'context.addAsDomain': "添加为域名工程",
@@ -494,6 +585,7 @@ const translations = {
     'merge.manualSaveDefault': "当前匹配范围与其他规则存在包含关系，需要手动保存并再次校验。",
     'merge.conflictSave': "规则匹配范围与其他规则存在包含关系，无法保存。",
     'merge.conflictWithRule': "当前匹配范围与「{target}」存在包含关系，无法自动保存。请调整匹配查询或匹配请求体，或点击保存再次校验。",
+    'merge.duplicateWithRule': "当前匹配范围与「{target}」完全相同，无法同时启用。",
     'merge.otherRule': "其他规则",
     'query.ignoreTip': "留空表示忽略查询；填写 a=1&b=2 表示必须包含这些字段",
     'query.templateTip': "取消勾选后按这里的必须字段匹配；留空表示忽略查询，实际请求可以多字段，顺序可以不同。",
@@ -913,7 +1005,7 @@ const translations = {
     'tree.expandAll': "Expand all",
     'tree.collapseAll': "Collapse all",
     'context.updateLocal': "Update Local Mock",
-    'context.createLocal': "Configure as Local Mock",
+    'context.createLocal': "Set as Local Mock",
     'context.updateRemote': "Update Rewrite Rule",
     'context.createRemote': "Configure as Rewrite Rule",
     'context.addAsDomain': "Add as Project Domain",
@@ -925,6 +1017,7 @@ const translations = {
     'merge.manualSaveDefault': "This match scope overlaps another rule. Save manually and validate again.",
     'merge.conflictSave': "Rule match scope overlaps another rule and cannot be saved.",
     'merge.conflictWithRule': "This match scope overlaps \"{target}\" and cannot auto-save. Adjust match query/request body, or click Save to validate again.",
+    'merge.duplicateWithRule': "This match scope is identical to \"{target}\" and cannot be enabled at the same time.",
     'merge.otherRule': "another rule",
     'query.ignoreTip': "Leave empty to ignore query. Enter a=1&b=2 to require those fields.",
     'query.templateTip': "When unchecked, requests must include these fields. Leave empty to ignore query. Extra fields and any order are allowed.",
@@ -1342,7 +1435,7 @@ const translations = {
     'tree.expandAll': 'Развернуть все',
     'tree.collapseAll': 'Свернуть все',
     'context.updateLocal': 'Обновить локальный макет',
-    'context.createLocal': 'Настроить как локальный макет',
+    'context.createLocal': 'Задать как локальный макет',
     'context.updateRemote': 'Обновить правило перезаписи',
     'context.createRemote': 'Настроить как правило перезаписи',
     'context.addAsDomain': 'Добавить как домен проекта',
@@ -1774,7 +1867,7 @@ const translations = {
     'tree.expandAll': 'सभी का विस्तार',
     'tree.collapseAll': 'सभी को संकुचित करें',
     'context.updateLocal': 'स्थानीय मॉक अपडेट करें',
-    'context.createLocal': 'स्थानीय मॉक के रूप में कॉन्फ़िगर करें',
+    'context.createLocal': 'स्थानीय मॉक के रूप में सेट करें',
     'context.updateRemote': 'पुनर्लेखन नियम अद्यतन करें',
     'context.createRemote': 'पुनर्लेखन नियम के रूप में कॉन्फ़िगर करें',
     'context.addAsDomain': 'प्रोजेक्ट डोमेन के रूप में जोड़ें',
@@ -2206,7 +2299,7 @@ const translations = {
     'tree.expandAll': 'Expandir todo',
     'tree.collapseAll': 'Contraer todo',
     'context.updateLocal': 'Actualizar simulacro local',
-    'context.createLocal': 'Configurar como simulacro local',
+    'context.createLocal': 'Usar como simulacro local',
     'context.updateRemote': 'Actualizar regla de reescritura',
     'context.createRemote': 'Configurar como regla de reescritura',
     'context.addAsDomain': 'Agregar como dominio del proyecto',
@@ -2638,7 +2731,7 @@ const translations = {
     'tree.expandAll': 'Alles erweitern',
     'tree.collapseAll': 'Alles einklappen',
     'context.updateLocal': 'Lokales Mock aktualisieren',
-    'context.createLocal': 'Als lokales Mock konfigurieren',
+    'context.createLocal': 'Als lokales Mock festlegen',
     'context.updateRemote': 'Rewrite-Regel aktualisieren',
     'context.createRemote': 'Als Rewrite-Regel konfigurieren',
     'context.addAsDomain': 'Als Projektdomäne hinzufügen',
@@ -3070,7 +3163,7 @@ const translations = {
     'tree.expandAll': 'Tout développer',
     'tree.collapseAll': 'Tout réduire',
     'context.updateLocal': 'Mettre à jour la simulation locale',
-    'context.createLocal': 'Configurer en tant que maquette locale',
+    'context.createLocal': 'Définir comme simulation locale',
     'context.updateRemote': 'Mettre à jour la règle de réécriture',
     'context.createRemote': 'Configurer comme règle de réécriture',
     'context.addAsDomain': 'Ajouter comme domaine de projet',
@@ -3502,7 +3595,7 @@ const translations = {
     'tree.expandAll': 'قم بتوسيع الكل',
     'tree.collapseAll': 'طي الكل',
     'context.updateLocal': 'تحديث وهمية المحلية',
-    'context.createLocal': 'تكوين كنموذج محلي',
+    'context.createLocal': 'تعيين كنموذج محلي',
     'context.updateRemote': 'تحديث قاعدة إعادة الكتابة',
     'context.createRemote': 'تكوين كقاعدة إعادة كتابة',
     'context.addAsDomain': 'إضافة كمجال المشروع',
@@ -3934,7 +4027,7 @@ const translations = {
     'tree.expandAll': "すべて展開",
     'tree.collapseAll': "すべて折りたたみ",
     'context.updateLocal': "ローカルモックを更新",
-    'context.createLocal': "ローカルモックに設定",
+    'context.createLocal': "ローカルモックとして設定",
     'context.updateRemote': "リライトルールを更新",
     'context.createRemote': "リライトルールに設定",
     'context.addAsDomain': "project ドメインに追加",
@@ -4363,7 +4456,7 @@ const translations = {
     'tree.expandAll': "전체 펼치기",
     'tree.collapseAll': "전체 접기",
     'context.updateLocal': "로컬 목 업데이트",
-    'context.createLocal': "로컬 목으로 설정",
+    'context.createLocal': "로컬 목으로 지정",
     'context.updateRemote': "리라이트 규칙 업데이트",
     'context.createRemote': "리라이트 규칙으로 설정",
     'context.addAsDomain': "프로젝트 도메인으로 추가",
@@ -4715,6 +4808,8 @@ const els = {
   clearNoteBtn: document.querySelector('#clear-note-btn'),
   saveNoteBtn: document.querySelector('#save-note-btn')
 };
+const previewPaneTemplate = livePreviewPane()?.cloneNode(true) || null;
+let previewPaneParkingLot = null;
 
 els.proxyToggleBtn.addEventListener('click', toggleProxyService);
 els.proxyStatus.addEventListener('click', (event) => {
@@ -4725,14 +4820,18 @@ els.aiWorkToggleBtn?.addEventListener('click', toggleAiWork);
 els.closeAiStatusBtn?.addEventListener('click', closeAiStatusDialog);
 els.workspaceResizer?.addEventListener('pointerdown', startWorkspaceResize);
 els.workspaceResizer?.addEventListener('keydown', handleWorkspaceResizeKeydown);
-els.remoteExampleDivider?.addEventListener('pointerdown', startRemoteExampleResize);
 document.addEventListener('mouseover', handleInstantTooltipOver);
 document.addEventListener('mousemove', handleInstantTooltipMove);
 document.addEventListener('mouseout', handleInstantTooltipOut);
 document.addEventListener('pointerdown', handlePreviewFindOutsidePointerDown, true);
 document.addEventListener('pointerdown', dismissProjectPathGuide, true);
 document.addEventListener('pointerdown', handleAdbProxyGuideOutsidePointerDown, true);
+document.addEventListener('pointerdown', handleFloatingMenuOutsidePointerDown, true);
 document.addEventListener('pointerdown', handleWorkspacePointerDown, true);
+document.addEventListener('pointerdown', handlePreviewTextSelectionPointerDown, true);
+document.addEventListener('pointermove', handlePreviewTextSelectionPointerMove, true);
+document.addEventListener('pointerup', stopPreviewTextSelectionDrag, true);
+document.addEventListener('pointercancel', stopPreviewTextSelectionDrag, true);
 window.addEventListener('resize', () => {
   renderProjectPathGuide();
   maybeShowAdbProxyGuide();
@@ -4807,62 +4906,12 @@ els.globalSearchDialog?.addEventListener('cancel', (event) => {
   event.preventDefault();
   closeGlobalSearchDialog();
 });
-els.previewFindInput?.addEventListener('input', () => {
-  updatePreviewFind(els.previewFindInput.value, { select: true });
-});
-els.previewFindInput?.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    movePreviewFind(event.shiftKey ? -1 : 1, { preserveFocus: true });
-    return;
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    closePreviewFindBar();
-  }
-});
-els.previewFindPrev?.addEventListener('click', () => {
-  movePreviewFind(-1, { preserveFocus: true });
-  keepPreviewFindInputFocused();
-});
-els.previewFindNext?.addEventListener('click', () => {
-  movePreviewFind(1, { preserveFocus: true });
-  keepPreviewFindInputFocused();
-});
-els.previewFindBar?.addEventListener('focusout', (event) => {
-  if (event.relatedTarget && els.previewFindBar.contains(event.relatedTarget)) return;
-  window.setTimeout(() => {
-    if (!els.previewFindBar.hidden && !els.previewFindBar.contains(document.activeElement)) {
-      closePreviewFindBar({ keepSelection: true });
-    }
-  });
-});
-els.overviewTab.addEventListener('click', () => setPreviewBodyTab('overview'));
-els.requestHeadTab.addEventListener('click', () => setPreviewBodyTab('requestHead'));
-els.responseHeadTab.addEventListener('click', () => setPreviewBodyTab('responseHead'));
-els.queryTab.addEventListener('click', () => setPreviewBodyTab('query'));
-els.responseBodyTab.addEventListener('click', () => {
-  if (state.previewMode === 'remote') {
-    openRemoteDslEditor();
-    return;
-  }
-  setPreviewBodyTab('response');
-});
-els.requestBodyTab.addEventListener('click', () => setPreviewBodyTab('request'));
-els.formatBodyBtn.addEventListener('click', formatEditableJsonBody);
-els.manualRuleSaveBtn.addEventListener('click', saveCurrentRuleManually);
-els.remoteExampleRequestTab.addEventListener('click', () => setRemoteExampleTab('request'));
-els.remoteExampleResponseTab.addEventListener('click', () => setRemoteExampleTab('response'));
-els.remoteExampleRequestHeadTab.addEventListener('click', () => setRemoteExampleTab('requestHead'));
-els.remoteExampleResponseHeadTab.addEventListener('click', () => setRemoteExampleTab('responseHead'));
-els.remoteExampleQueryTab.addEventListener('click', () => setRemoteExampleTab('query'));
-els.remoteExamplePreview.addEventListener('scroll', rememberRemoteExampleScroll);
+bindPreviewPaneEvents(livePreviewPane());
 els.localBtn.addEventListener('click', () => saveSelectedCapture('exact'));
 els.remoteBtn.addEventListener('click', saveSelectedRemoteRule);
 els.copyCurlBtn.addEventListener('click', copySelectedCurl);
 els.repeatBtn.addEventListener('click', repeatSelectedRequest);
 els.noteBtn.addEventListener('click', openNoteDialog);
-els.analyzeNoteBtn.addEventListener('click', openCurrentDetailNote);
 els.deleteRuleBtn.addEventListener('click', deleteSelectedRule);
 els.aiSelectorBtn.addEventListener('click', (event) => {
   event.stopPropagation();
@@ -4879,12 +4928,13 @@ els.aiSelectorMenu.querySelectorAll('button').forEach((btn) => {
     closeAiSelectorMenu();
   });
 });
-window.addEventListener('click', () => {
+window.addEventListener('click', (event) => {
+  const target = event.target;
   closeItemContextMenu();
   closeAiSelectorMenu();
   closeClearCapturesMenu();
   closeRemoteAddMenu();
-  closeAdbDeviceMenu();
+  if (!target?.closest?.('.adb-proxy-menu-wrap')) closeAdbDeviceMenu();
 });
 window.addEventListener('contextmenu', (event) => {
   if (!event.target.closest?.('.capture,.rule')) {
@@ -4923,6 +4973,13 @@ function closeItemContextMenu() {
   if (!els.itemContextMenu) return;
   els.itemContextMenu.hidden = true;
   els.itemContextMenu.innerHTML = '';
+}
+
+function handleFloatingMenuOutsidePointerDown(event) {
+  const target = event.target;
+  if (!target?.closest?.('.ai-selector')) closeAiSelectorMenu();
+  if (!target?.closest?.('.clear-captures-menu-wrap')) closeClearCapturesMenu();
+  if (!target?.closest?.('.remote-add-menu-wrap')) closeRemoteAddMenu();
 }
 
 function showItemContextMenu(event, actions) {
@@ -5154,7 +5211,7 @@ function renderAskAiButton() {
   setInstantTooltip(els.askAiBtn, projectPath ? t('ai.askTip') : t('ai.askNoProject'));
   refreshEditorTitle();
 }
-els.captureMergeQuery.addEventListener('change', () => {
+function handleCaptureMergeQueryChange() {
   if (!shouldMergeCaptureList()) return;
   const capture = selectedCaptureSummary();
   if (!capture) return;
@@ -5180,8 +5237,9 @@ els.captureMergeQuery.addEventListener('change', () => {
     els.captureQueryInput.select();
   }
   scheduleCaptureMergeRuleSave(capture, options);
-});
-els.captureMergeBody.addEventListener('change', () => {
+}
+
+function handleCaptureMergeBodyChange() {
   if (!shouldMergeCaptureList()) return;
   const capture = selectedCaptureSummary();
   if (!capture) return;
@@ -5205,8 +5263,9 @@ els.captureMergeBody.addEventListener('change', () => {
   refreshCaptureRequestEditor();
   updateFormatBodyButton();
   scheduleCaptureMergeRuleSave(capture, options);
-});
-els.captureQueryInput.addEventListener('input', () => {
+}
+
+function handleCaptureQueryInput() {
   const capture = selectedCaptureSummary();
   if (!capture || !shouldMergeCaptureList() || els.captureMergeQuery.checked) return;
   const options = {
@@ -5220,8 +5279,9 @@ els.captureQueryInput.addEventListener('input', () => {
   };
   if (!applyCaptureMergeRuleDraftForAutoSave(capture, options, { render: false })) return;
   scheduleCaptureMergeRuleSave(capture, options);
-});
-els.captureQueryInput.addEventListener('blur', () => {
+}
+
+function commitCaptureQueryInput() {
   const capture = selectedCaptureSummary();
   if (!capture || !shouldMergeCaptureList() || els.captureMergeQuery.checked) return;
   const options = {
@@ -5237,132 +5297,7 @@ els.captureQueryInput.addEventListener('blur', () => {
   updateCaptureMergeRule(capture, options).catch((error) => {
     console.error(error);
   });
-});
-els.ruleOptionQuery.addEventListener('change', () => {
-  if (state.selectedRuleId) {
-    toggleRuleQuery(state.selectedRuleId, els.ruleOptionQuery.checked);
-    return;
-  }
-  if (state.selectedRemoteRuleId) {
-    toggleRemoteRuleQuery(state.selectedRemoteRuleId, els.ruleOptionQuery.checked);
-  }
-});
-els.ruleOptionBody.addEventListener('change', () => {
-  if (state.selectedRuleId) {
-    toggleRuleBody(state.selectedRuleId, els.ruleOptionBody.checked);
-    return;
-  }
-  if (state.selectedRemoteRuleId) {
-    toggleRemoteRuleBody(state.selectedRemoteRuleId, els.ruleOptionBody.checked);
-  }
-});
-els.ruleOptionEnabled.addEventListener('change', () => {
-  if (state.selectedRuleId) {
-    toggleRuleEnabled(state.selectedRuleId, els.ruleOptionEnabled.checked);
-    return;
-  }
-  if (state.selectedRemoteRuleId) {
-    toggleRemoteRuleEnabled(state.selectedRemoteRuleId, els.ruleOptionEnabled.checked);
-  }
-});
-els.globalRemoteEnabled.addEventListener('change', () => {
-  const rule = selectedRemoteRule();
-  if (!rule || !isGlobalRemoteRule(rule)) return;
-  rule.enabled = els.globalRemoteEnabled.checked;
-  renderRemoteRules();
-  scheduleRuleAutoSave({ immediate: true });
-});
-els.addRemoteRuleBtn.addEventListener('click', (event) => {
-  event.stopPropagation();
-  toggleRemoteAddMenu();
-});
-els.remoteAddMenu.addEventListener('click', (event) => {
-  event.stopPropagation();
-});
-els.addRemoteDslBtn.addEventListener('click', () => {
-  closeRemoteAddMenu();
-  addRemoteDslRow();
-});
-els.remoteAiRuleBtn.addEventListener('click', () => {
-  closeRemoteAddMenu();
-  addRemoteAiStep();
-});
-els.remoteAiGenerateBtn.addEventListener('click', handleRemoteAiPrimaryAction);
-els.askAiBtn?.addEventListener('click', askAiAboutCurrentCapture);
-els.remoteDslBackBtn.addEventListener('click', openRemoteDslEditor);
-els.remoteDslSummary.addEventListener('input', () => {
-  const step = selectedDslStep();
-  if (!step) return;
-  step.note = els.remoteDslSummary.value;
-  renderRemoteDslRows();
-  scheduleRuleAutoSave();
-});
-els.remoteDslEnabled.addEventListener('change', () => {
-  const step = selectedDslStep();
-  if (!step) return;
-  step.enabled = els.remoteDslEnabled.checked;
-  renderRemoteDslRows();
-  scheduleRemotePreview();
-  scheduleRuleAutoSave();
-});
-els.remoteDslAction.addEventListener('change', () => {
-  const step = selectedDslStep();
-  if (!step) return;
-  step.action = els.remoteDslAction.value;
-  syncRemoteExampleTabForDslAction(step.action);
-  renderRemoteDslRows();
-  scheduleRemotePreview();
-  scheduleRuleAutoSave();
-});
-els.remoteDslPath.addEventListener('input', () => {
-  const step = selectedDslStep();
-  if (!step) return;
-  step.path = els.remoteDslPath.value;
-  renderRemoteDslRows();
-  scheduleRemotePreview();
-  scheduleRuleAutoSave();
-});
-els.remoteDslValue.addEventListener('input', () => {
-  const step = selectedDslStep();
-  if (!step) return;
-  step.value = els.remoteDslValue.value;
-  renderRemoteDslRows();
-  scheduleRemotePreview();
-  scheduleRuleAutoSave();
-});
-els.remoteAiScript.addEventListener('input', () => {
-  updateRemoteAiScriptHighlight();
-  saveRemoteAiDraft();
-  scheduleRemotePreview();
-  scheduleRuleAutoSave();
-});
-els.remoteAiScript.addEventListener('scroll', syncRemoteAiScriptHighlightScroll);
-els.remoteAiPrompt.addEventListener('input', () => {
-  resetRemoteAiPromptHistoryCursor();
-  saveRemoteAiDraft();
-  refreshRemoteAiGuideText();
-  scheduleRuleAutoSave();
-});
-els.remoteAiPrompt.addEventListener('keydown', handleRemoteAiPromptHistoryKey);
-els.remoteAiBackBtn.addEventListener('click', openRemoteDslEditor);
-els.remoteAiSummary.addEventListener('input', () => {
-  const step = selectedAiStep();
-  if (step) {
-    step.summary = normalizeAiSummary(els.remoteAiSummary.value);
-    renderRemoteDslRows();
-  }
-  saveRemoteAiDraft();
-  scheduleRuleAutoSave();
-});
-els.remoteAiEnabled.addEventListener('change', () => {
-  const step = selectedAiStep();
-  if (!step) return;
-  step.enabled = els.remoteAiEnabled.checked;
-  renderRemoteDslRows();
-  scheduleRemotePreview();
-  scheduleRuleAutoSave();
-});
-els.remoteRuleHelpBtn.addEventListener('click', showRemoteRuleHelp);
+}
 els.closeRemoteRuleHelpBtn.addEventListener('click', closeRemoteRuleHelp);
 els.closeNoteBtn.addEventListener('click', closeNoteDialog);
 els.clearNoteBtn.addEventListener('click', clearCurrentNote);
@@ -5530,15 +5465,7 @@ els.displayFilter.addEventListener('input', () => {
   renderCaptures();
   scheduleSettingsSave();
 });
-els.ruleQueryInput.addEventListener('input', () => {
-  if (state.previewMode === 'remote') {
-    scheduleRemotePreview();
-  }
-  scheduleRuleAutoSave();
-});
-els.editor.addEventListener('input', handleBodyEditorInput);
-els.editor.addEventListener('scroll', syncEditableCodeHighlightScroll);
-els.editor.addEventListener('blur', () => {
+function commitCaptureBodyEditorOnBlur() {
   if (state.previewMode !== 'capture' || state.previewBodyTab !== 'request') return;
   const capture = selectedCaptureSummary();
   if (!capture || !shouldMergeCaptureList() || els.captureMergeBody.checked) return;
@@ -5555,7 +5482,7 @@ els.editor.addEventListener('blur', () => {
   updateCaptureMergeRule(capture, options).catch((error) => {
     console.error(error);
   });
-});
+}
 
 function handleBodyEditorInput() {
   updateEditableCodeHighlight();
@@ -5738,6 +5665,7 @@ function applyAppearance() {
   if (els.appearanceSelect && els.appearanceSelect.value !== state.appearance) {
     els.appearanceSelect.value = state.appearance;
   }
+  applyTerminalTheme();
 }
 
 function applyStaticTranslations(root = document) {
@@ -6857,6 +6785,16 @@ function terminalTheme() {
   };
 }
 
+function applyTerminalTheme() {
+  if (!terminalInstances?.size) return;
+  const theme = terminalTheme();
+  for (const instance of terminalInstances.values()) {
+    if (!instance?.xterm) continue;
+    instance.xterm.options.theme = theme;
+    updateTerminalOverscan(instance, terminalCurrentViewportY(instance));
+  }
+}
+
 function fitTerminal(instance = activeTerminalInstance) {
   if (!ensureActiveTerminalState().open || !instance?.fitAddon || !instance?.xterm) return;
   window.clearTimeout(terminalResizeTimer);
@@ -6900,12 +6838,111 @@ function handleWorkspacePointerDown(event) {
   }
   if (event.target?.closest?.('.preview-panel')) {
     rememberWorkspaceFocus('preview');
-    if (!isTextEntryElement(event.target)) {
+    if (!isTextEntryElement(event.target) && !isSelectablePreviewTarget(event.target)) {
       window.requestAnimationFrame(() => {
         focusPreviewWorkspaceTabs();
       });
     }
   }
+}
+
+function isSelectablePreviewTarget(target) {
+  return Boolean(target?.closest?.([
+    '.code-preview',
+    '.capture-overview',
+    '.capture-query-preview',
+    '.capture-diff-view',
+    '.remote-example-diff',
+    '#remote-example-preview',
+    '.diff-body',
+    '.diff-cell',
+    '.diff-full-code'
+  ].join(', ')));
+}
+
+function previewSelectableTextRoot(target) {
+  if (!target || isTextEntryElement(target)) return null;
+  if (target.closest?.('button, input, textarea, select, a, [role="button"], .json-fold-toggle, .capture-overview-caret')) return null;
+  const root = target.closest?.([
+    '.code-preview',
+    '.capture-overview',
+    '.capture-query-preview',
+    '.capture-diff-view',
+    '.remote-example-diff',
+    '#remote-example-preview',
+    '.diff-body',
+    '.diff-cell',
+    '.diff-full-code',
+    '.remote-ai-output'
+  ].join(', '));
+  if (!root || root.hidden || root.offsetParent === null) return null;
+  return root;
+}
+
+function handlePreviewTextSelectionPointerDown(event) {
+  if (event.button !== 0 || event.detail > 1) return;
+  const root = previewSelectableTextRoot(event.target);
+  if (!root) return;
+  const startRange = caretRangeFromViewportPoint(event.clientX, event.clientY, root);
+  if (!startRange) return;
+  previewTextSelectionDrag = {
+    root,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    startRange,
+    selecting: false
+  };
+}
+
+function handlePreviewTextSelectionPointerMove(event) {
+  const drag = previewTextSelectionDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  const distance = Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY);
+  if (!drag.selecting && distance < 4) return;
+  const endRange = caretRangeFromViewportPoint(event.clientX, event.clientY, drag.root);
+  if (!endRange) return;
+  drag.selecting = true;
+  selectBetweenCaretRanges(drag.startRange, endRange);
+}
+
+function stopPreviewTextSelectionDrag(event) {
+  if (!previewTextSelectionDrag) return;
+  if (event?.pointerId != null && previewTextSelectionDrag.pointerId !== event.pointerId) return;
+  previewTextSelectionDrag = null;
+}
+
+function caretRangeFromViewportPoint(x, y, root) {
+  let range = null;
+  if (typeof document.caretRangeFromPoint === 'function') {
+    range = document.caretRangeFromPoint(x, y);
+  } else if (typeof document.caretPositionFromPoint === 'function') {
+    const position = document.caretPositionFromPoint(x, y);
+    if (position?.offsetNode) {
+      range = document.createRange();
+      range.setStart(position.offsetNode, position.offset);
+      range.collapse(true);
+    }
+  }
+  if (!range || !root.contains(range.startContainer)) return null;
+  return range;
+}
+
+function selectBetweenCaretRanges(startRange, endRange) {
+  if (!startRange || !endRange) return;
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  const comparison = startRange.compareBoundaryPoints(Range.START_TO_START, endRange);
+  if (comparison <= 0) {
+    range.setStart(startRange.startContainer, startRange.startOffset);
+    range.setEnd(endRange.startContainer, endRange.startOffset);
+  } else {
+    range.setStart(endRange.startContainer, endRange.startOffset);
+    range.setEnd(startRange.startContainer, startRange.startOffset);
+  }
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 function previewWorkspaceHistoryDeltaFromMouseEvent(event) {
@@ -7392,6 +7429,640 @@ function activeSideListItemForFocus(list) {
     list.querySelector('.capture[data-capture-id], .rule[data-rule-id]');
 }
 
+function livePreviewPane() {
+  return els.previewPanel?.querySelector?.(':scope > .editor') || null;
+}
+
+function ensurePreviewPaneParkingLot() {
+  if (previewPaneParkingLot?.isConnected) return previewPaneParkingLot;
+  previewPaneParkingLot = document.querySelector('#preview-pane-parking-lot');
+  if (!previewPaneParkingLot) {
+    previewPaneParkingLot = document.createElement('div');
+    previewPaneParkingLot.id = 'preview-pane-parking-lot';
+    previewPaneParkingLot.hidden = true;
+    previewPaneParkingLot.setAttribute('aria-hidden', 'true');
+    previewPaneParkingLot.style.display = 'none';
+    document.body.append(previewPaneParkingLot);
+  }
+  return previewPaneParkingLot;
+}
+
+function insertPreviewPaneIntoPanel(pane) {
+  const panel = els.previewPanel;
+  if (!pane || !panel) return false;
+  pane.hidden = false;
+  pane.removeAttribute('aria-hidden');
+  const tabs = els.previewWorkspaceTabs;
+  if (tabs?.parentElement === panel) {
+    tabs.insertAdjacentElement('afterend', pane);
+  } else {
+    panel.append(pane);
+  }
+  return true;
+}
+
+function parkPreviewPaneNode(pane) {
+  if (!pane) return;
+  pane.hidden = true;
+  pane.setAttribute('aria-hidden', 'true');
+  ensurePreviewPaneParkingLot().append(pane);
+}
+
+function previewPaneCacheKey(tabId = state.activePreviewTabId) {
+  const projectId = activeCaptureTab()?.id || 'default';
+  return tabId ? `${projectId}::${tabId}` : '';
+}
+
+function snapshotPreviewPaneState() {
+  return {
+    previewMode: state.previewMode,
+    previewBodyTab: state.previewBodyTab,
+    previewTabs: Array.isArray(state.previewTabs) ? [...state.previewTabs] : [],
+    previewShowsBodyTabs: state.previewShowsBodyTabs,
+    previewOverview: state.previewOverview,
+    previewRequestHead: state.previewRequestHead,
+    previewResponseHead: state.previewResponseHead,
+    previewResponse: state.previewResponse,
+    previewRequest: state.previewRequest,
+    previewFindOpen: state.previewFindOpen,
+    previewFindQuery: state.previewFindQuery,
+    previewFindMatches: Array.isArray(state.previewFindMatches) ? [...state.previewFindMatches] : [],
+    previewFindIndex: state.previewFindIndex,
+    selectedCaptureId: state.selectedCaptureId,
+    selectedRuleId: state.selectedRuleId,
+    selectedRemoteRuleId: state.selectedRemoteRuleId,
+    selectedCaptureDetail: state.selectedCaptureDetail,
+    remoteExampleTab: state.remoteExampleTab,
+    remoteExample: state.remoteExample,
+    remoteExampleScroll: { ...(state.remoteExampleScroll || {}) },
+    remotePreviewRefreshing: state.remotePreviewRefreshing,
+    remoteSteps: Array.isArray(state.remoteSteps) ? structuredCloneSafe(state.remoteSteps) : [],
+    selectedDslStepId: state.selectedDslStepId,
+    selectedAiStepId: state.selectedAiStepId,
+    savedEditorState: state.savedEditorState ? { ...state.savedEditorState } : null,
+    manualRuleSaveRequired: state.manualRuleSaveRequired,
+    manualRuleSaveMessage: state.manualRuleSaveMessage,
+    manualRuleSaveScope: state.manualRuleSaveScope,
+    expandedRuleHitCaptures: new Set(state.expandedRuleHitCaptures || [])
+  };
+}
+
+function structuredCloneSafe(value) {
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(value);
+    } catch {
+      // Fall through to JSON for plain data.
+    }
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
+function restorePreviewPaneState(snapshot = {}) {
+  state.previewMode = snapshot.previewMode || 'empty';
+  state.previewBodyTab = normalizePreviewBodyTab(snapshot.previewBodyTab);
+  state.previewTabs = Array.isArray(snapshot.previewTabs) ? [...snapshot.previewTabs] : [];
+  state.previewShowsBodyTabs = Boolean(snapshot.previewShowsBodyTabs);
+  state.previewOverview = snapshot.previewOverview || null;
+  state.previewRequestHead = snapshot.previewRequestHead || null;
+  state.previewResponseHead = snapshot.previewResponseHead || null;
+  state.previewResponse = snapshot.previewResponse || null;
+  state.previewRequest = snapshot.previewRequest || null;
+  state.previewFindOpen = Boolean(snapshot.previewFindOpen);
+  state.previewFindQuery = String(snapshot.previewFindQuery || '');
+  state.previewFindMatches = Array.isArray(snapshot.previewFindMatches) ? [...snapshot.previewFindMatches] : [];
+  state.previewFindIndex = Number.isFinite(snapshot.previewFindIndex) ? snapshot.previewFindIndex : -1;
+  state.selectedCaptureId = snapshot.selectedCaptureId || null;
+  state.selectedRuleId = snapshot.selectedRuleId || null;
+  state.selectedRemoteRuleId = snapshot.selectedRemoteRuleId || null;
+  state.selectedCaptureDetail = snapshot.selectedCaptureDetail || null;
+  state.remoteExampleTab = normalizeRemoteExampleTab(snapshot.remoteExampleTab);
+  state.remoteExample = snapshot.remoteExample || null;
+  state.remoteExampleScroll = { ...(snapshot.remoteExampleScroll || {}) };
+  state.remotePreviewRefreshing = Boolean(snapshot.remotePreviewRefreshing);
+  state.remoteSteps = Array.isArray(snapshot.remoteSteps) ? structuredCloneSafe(snapshot.remoteSteps) : [];
+  state.selectedDslStepId = snapshot.selectedDslStepId || '';
+  state.selectedAiStepId = snapshot.selectedAiStepId || '';
+  state.savedEditorState = snapshot.savedEditorState ? { ...snapshot.savedEditorState } : null;
+  state.manualRuleSaveRequired = Boolean(snapshot.manualRuleSaveRequired);
+  state.manualRuleSaveMessage = String(snapshot.manualRuleSaveMessage || '');
+  state.manualRuleSaveScope = String(snapshot.manualRuleSaveScope || '');
+  state.expandedRuleHitCaptures = snapshot.expandedRuleHitCaptures instanceof Set
+    ? new Set(snapshot.expandedRuleHitCaptures)
+    : new Set();
+  updatePreviewChrome();
+}
+
+function rebindPreviewPaneElements(root = livePreviewPane()) {
+  if (!root) return;
+  for (const [key, selector] of Object.entries(previewPaneSelectors)) {
+    els[key] = root.querySelector(selector);
+  }
+}
+
+function bindPreviewPaneEvents(root = livePreviewPane()) {
+  if (!root || root.dataset.previewPaneBound === '1') return;
+  root.dataset.previewPaneBound = '1';
+  root.addEventListener('click', handlePreviewPaneClick);
+  root.addEventListener('input', handlePreviewPaneInput);
+  root.addEventListener('change', handlePreviewPaneChange);
+  root.addEventListener('keydown', handlePreviewPaneKeydown);
+  root.addEventListener('pointerdown', handlePreviewPanePointerDown);
+  root.addEventListener('scroll', handlePreviewPaneScroll, true);
+  root.addEventListener('focusout', handlePreviewPaneFocusOut);
+  root.addEventListener('blur', handlePreviewPaneBlur, true);
+}
+
+function syncCurrentPreviewPaneCache() {
+  if (!activePreviewPaneCacheKey) return;
+  const pane = livePreviewPane();
+  const cached = previewPaneCache.get(activePreviewPaneCacheKey);
+  if (!pane || !cached || cached.node !== pane) return;
+  cached.state = snapshotPreviewPaneState();
+}
+
+function parkActivePreviewPane() {
+  const pane = livePreviewPane();
+  const key = activePreviewPaneCacheKey || previewPaneCacheKey();
+  if (!pane || !key) return;
+  syncSelectedAiStepFromEditor();
+  syncSelectedDslStepFromEditor();
+  updateActivePreviewBodyFromEditor();
+  rememberRemoteExampleScroll();
+  previewPaneCache.set(key, {
+    node: pane,
+    state: snapshotPreviewPaneState()
+  });
+  parkPreviewPaneNode(pane);
+  activePreviewPaneCacheKey = '';
+}
+
+async function preparePreviewPaneSwitch() {
+  const currentTabId = state.activePreviewTabId;
+  if (!currentTabId) return;
+  await flushCurrentRuleAutoSaveSafely();
+  if (state.activePreviewTabId !== currentTabId) return;
+  parkActivePreviewPane();
+}
+
+async function flushCurrentRuleAutoSaveSafely() {
+  try {
+    await flushCurrentRuleAutoSave();
+  } catch (error) {
+    console.error(error);
+    if (!state.manualRuleSaveRequired) {
+      markManualRuleSaveRequired(error?.message || t('actions.saveFailed'));
+    }
+  }
+}
+
+function restoreCachedPreviewPane(tabId) {
+  const key = previewPaneCacheKey(tabId);
+  const cached = key ? previewPaneCache.get(key) : null;
+  if (!cached?.node || !els.previewPanel) return false;
+  const current = livePreviewPane();
+  if (current && current !== cached.node) {
+    parkPreviewPaneNode(current);
+  }
+  insertPreviewPaneIntoPanel(cached.node);
+  activePreviewPaneCacheKey = key;
+  rebindPreviewPaneElements(cached.node);
+  bindPreviewPaneEvents(cached.node);
+  restorePreviewPaneState(cached.state);
+  closeRemoteAddMenu();
+  renderPreviewWorkspaceTabs();
+  renderCaptures();
+  renderRules();
+  renderRemoteRules();
+  renderAiSelector();
+  updateManualRuleSaveButton();
+  updatePreviewChrome();
+  return true;
+}
+
+function ensurePreviewPaneForTab(tabId) {
+  const targetKey = previewPaneCacheKey(tabId);
+  const pane = livePreviewPane();
+  if (pane && targetKey && activePreviewPaneCacheKey === targetKey) {
+    adoptLivePreviewPane(tabId);
+    return { restored: false };
+  }
+  if (pane && !activePreviewPaneCacheKey) {
+    adoptLivePreviewPane(tabId);
+    return { restored: false };
+  }
+  if (pane) {
+    parkActivePreviewPane();
+  }
+  if (restoreCachedPreviewPane(tabId)) {
+    return { restored: true };
+  }
+  ensureFreshPreviewPane(tabId);
+  return { restored: false };
+}
+
+function ensureFreshPreviewPane(tabId = state.activePreviewTabId) {
+  const panel = els.previewPanel;
+  if (!panel || !previewPaneTemplate) return;
+  const current = livePreviewPane();
+  if (current) parkPreviewPaneNode(current);
+  const pane = previewPaneTemplate.cloneNode(true);
+  delete pane.dataset.previewPaneBound;
+  insertPreviewPaneIntoPanel(pane);
+  activePreviewPaneCacheKey = previewPaneCacheKey(tabId);
+  rebindPreviewPaneElements(pane);
+  bindPreviewPaneEvents(pane);
+  applyStaticTranslations(pane);
+  convertTitleToInstantTooltip(pane);
+  if (activePreviewPaneCacheKey) {
+    previewPaneCache.set(activePreviewPaneCacheKey, {
+      node: pane,
+      state: snapshotPreviewPaneState()
+    });
+  }
+}
+
+function adoptLivePreviewPane(tabId = state.activePreviewTabId) {
+  const pane = livePreviewPane();
+  if (!pane) return;
+  activePreviewPaneCacheKey = previewPaneCacheKey(tabId);
+  if (activePreviewPaneCacheKey) {
+    previewPaneCache.set(activePreviewPaneCacheKey, {
+      node: pane,
+      state: snapshotPreviewPaneState()
+    });
+  }
+  rebindPreviewPaneElements(pane);
+  bindPreviewPaneEvents(pane);
+}
+
+function removeCachedPreviewPane(tabId) {
+  const key = previewPaneCacheKey(tabId);
+  if (!key) return;
+  const cached = previewPaneCache.get(key);
+  cached?.node?.remove?.();
+  previewPaneCache.delete(key);
+  if (activePreviewPaneCacheKey === key) activePreviewPaneCacheKey = '';
+}
+
+function clearPreviewPaneCacheForCaptureTab(tabId) {
+  if (!tabId) return;
+  const prefix = `${tabId}::`;
+  for (const [key, cached] of previewPaneCache.entries()) {
+    if (!key.startsWith(prefix)) continue;
+    cached.node?.remove?.();
+    previewPaneCache.delete(key);
+  }
+  if (activePreviewPaneCacheKey.startsWith(prefix)) activePreviewPaneCacheKey = '';
+}
+
+function clearPreviewPaneCache() {
+  for (const cached of previewPaneCache.values()) {
+    cached.node?.remove?.();
+  }
+  previewPaneCache.clear();
+  activePreviewPaneCacheKey = '';
+}
+
+function handlePreviewPaneClick(event) {
+  const target = event.target;
+  if (target.closest('#overview-tab')) {
+    setPreviewBodyTab('overview');
+    return;
+  }
+  if (target.closest('#request-head-tab')) {
+    setPreviewBodyTab('requestHead');
+    return;
+  }
+  if (target.closest('#response-head-tab')) {
+    setPreviewBodyTab('responseHead');
+    return;
+  }
+  if (target.closest('#query-tab')) {
+    setPreviewBodyTab('query');
+    return;
+  }
+  if (target.closest('#response-body-tab')) {
+    if (state.previewMode === 'remote') {
+      openRemoteDslEditor();
+      return;
+    }
+    setPreviewBodyTab('response');
+    return;
+  }
+  if (target.closest('#request-body-tab')) {
+    setPreviewBodyTab('request');
+    return;
+  }
+  if (target.closest('#format-body-btn')) {
+    formatEditableJsonBody();
+    return;
+  }
+  if (target.closest('#manual-rule-save-btn')) {
+    saveCurrentRuleManually();
+    return;
+  }
+  if (target.closest('#preview-find-prev')) {
+    movePreviewFind(-1, { preserveFocus: true });
+    keepPreviewFindInputFocused();
+    return;
+  }
+  if (target.closest('#preview-find-next')) {
+    movePreviewFind(1, { preserveFocus: true });
+    keepPreviewFindInputFocused();
+    return;
+  }
+  if (target.closest('#remote-example-request-tab')) {
+    setRemoteExampleTab('request');
+    return;
+  }
+  if (target.closest('#remote-example-response-tab')) {
+    setRemoteExampleTab('response');
+    return;
+  }
+  if (target.closest('#remote-example-request-head-tab')) {
+    setRemoteExampleTab('requestHead');
+    return;
+  }
+  if (target.closest('#remote-example-response-head-tab')) {
+    setRemoteExampleTab('responseHead');
+    return;
+  }
+  if (target.closest('#remote-example-query-tab')) {
+    setRemoteExampleTab('query');
+    return;
+  }
+  if (target.closest('#local-btn')) {
+    saveSelectedCapture('exact');
+    return;
+  }
+  if (target.closest('#remote-btn')) {
+    saveSelectedRemoteRule();
+    return;
+  }
+  if (target.closest('#copy-curl-btn')) {
+    copySelectedCurl();
+    return;
+  }
+  if (target.closest('#repeat-btn')) {
+    repeatSelectedRequest();
+    return;
+  }
+  if (target.closest('#note-btn')) {
+    openNoteDialog();
+    return;
+  }
+  if (target.closest('#analyze-note-btn')) {
+    openCurrentDetailNote();
+    return;
+  }
+  if (target.closest('#delete-rule-btn')) {
+    deleteSelectedRule();
+    return;
+  }
+  if (target.closest('#add-remote-rule-btn')) {
+    event.stopPropagation();
+    toggleRemoteAddMenu();
+    return;
+  }
+  if (target.closest('#remote-add-menu')) {
+    event.stopPropagation();
+  }
+  if (target.closest('#add-remote-dsl-btn')) {
+    closeRemoteAddMenu();
+    addRemoteDslRow();
+    return;
+  }
+  if (target.closest('#remote-ai-rule-btn')) {
+    closeRemoteAddMenu();
+    addRemoteAiStep();
+    return;
+  }
+  if (target.closest('#remote-ai-generate-btn')) {
+    handleRemoteAiPrimaryAction();
+    return;
+  }
+  if (target.closest('#ask-ai-btn')) {
+    askAiAboutCurrentCapture();
+    return;
+  }
+  if (target.closest('#remote-dsl-back-btn') || target.closest('#remote-ai-back-btn')) {
+    openRemoteDslEditor();
+    return;
+  }
+  if (target.closest('#remote-rule-help-btn')) {
+    showRemoteRuleHelp();
+  }
+}
+
+function handlePreviewPanePointerDown(event) {
+  if (event.target.closest('.remote-example-divider')) {
+    startRemoteExampleResize(event);
+  }
+}
+
+function handlePreviewPaneInput(event) {
+  const target = event.target;
+  if (target.matches('#capture-query-input')) {
+    handleCaptureQueryInput();
+    return;
+  }
+  if (target.matches('#rule-query-input')) {
+    if (state.previewMode === 'remote') {
+      scheduleRemotePreview();
+    }
+    scheduleRuleAutoSave();
+    return;
+  }
+  if (target.matches('#preview-find-input')) {
+    updatePreviewFind(target.value, { select: true });
+    return;
+  }
+  if (target.matches('#body-editor')) {
+    handleBodyEditorInput();
+    return;
+  }
+  if (target.matches('#remote-dsl-summary')) {
+    const step = selectedDslStep();
+    if (!step) return;
+    step.note = target.value;
+    renderRemoteDslRows();
+    scheduleRuleAutoSave();
+    return;
+  }
+  if (target.matches('#remote-dsl-path')) {
+    const step = selectedDslStep();
+    if (!step) return;
+    step.path = target.value;
+    renderRemoteDslRows();
+    scheduleRemotePreview();
+    scheduleRuleAutoSave();
+    return;
+  }
+  if (target.matches('#remote-dsl-value')) {
+    const step = selectedDslStep();
+    if (!step) return;
+    step.value = target.value;
+    renderRemoteDslRows();
+    scheduleRemotePreview();
+    scheduleRuleAutoSave();
+    return;
+  }
+  if (target.matches('#remote-ai-script')) {
+    updateRemoteAiScriptHighlight();
+    saveRemoteAiDraft();
+    scheduleRemotePreview();
+    scheduleRuleAutoSave();
+    return;
+  }
+  if (target.matches('#remote-ai-prompt')) {
+    resetRemoteAiPromptHistoryCursor();
+    saveRemoteAiDraft();
+    refreshRemoteAiGuideText();
+    scheduleRuleAutoSave();
+    return;
+  }
+  if (target.matches('#remote-ai-summary')) {
+    const step = selectedAiStep();
+    if (step) {
+      step.summary = normalizeAiSummary(target.value);
+      renderRemoteDslRows();
+    }
+    saveRemoteAiDraft();
+    scheduleRuleAutoSave();
+  }
+}
+
+function handlePreviewPaneChange(event) {
+  const target = event.target;
+  if (target.matches('#capture-merge-query')) {
+    handleCaptureMergeQueryChange();
+    return;
+  }
+  if (target.matches('#capture-merge-body')) {
+    handleCaptureMergeBodyChange();
+    return;
+  }
+  if (target.matches('#rule-option-query')) {
+    if (state.selectedRuleId) {
+      toggleRuleQuery(state.selectedRuleId, target.checked);
+      return;
+    }
+    if (state.selectedRemoteRuleId) {
+      toggleRemoteRuleQuery(state.selectedRemoteRuleId, target.checked);
+    }
+    return;
+  }
+  if (target.matches('#rule-option-body')) {
+    if (state.selectedRuleId) {
+      toggleRuleBody(state.selectedRuleId, target.checked);
+      return;
+    }
+    if (state.selectedRemoteRuleId) {
+      toggleRemoteRuleBody(state.selectedRemoteRuleId, target.checked);
+    }
+    return;
+  }
+  if (target.matches('#rule-option-enabled')) {
+    if (state.selectedRuleId) {
+      toggleRuleEnabled(state.selectedRuleId, target.checked);
+      return;
+    }
+    if (state.selectedRemoteRuleId) {
+      toggleRemoteRuleEnabled(state.selectedRemoteRuleId, target.checked);
+    }
+    return;
+  }
+  if (target.matches('#global-remote-enabled')) {
+    const rule = selectedRemoteRule();
+    if (!rule || !isGlobalRemoteRule(rule)) return;
+    rule.enabled = target.checked;
+    renderRemoteRules();
+    scheduleRuleAutoSave({ immediate: true });
+    return;
+  }
+  if (target.matches('#remote-dsl-enabled')) {
+    const step = selectedDslStep();
+    if (!step) return;
+    step.enabled = target.checked;
+    renderRemoteDslRows();
+    scheduleRemotePreview();
+    scheduleRuleAutoSave();
+    return;
+  }
+  if (target.matches('#remote-dsl-action')) {
+    const step = selectedDslStep();
+    if (!step) return;
+    step.action = target.value;
+    syncRemoteExampleTabForDslAction(step.action);
+    renderRemoteDslRows();
+    scheduleRemotePreview();
+    scheduleRuleAutoSave();
+    return;
+  }
+  if (target.matches('#remote-ai-enabled')) {
+    const step = selectedAiStep();
+    if (!step) return;
+    step.enabled = target.checked;
+    renderRemoteDslRows();
+    scheduleRemotePreview();
+    scheduleRuleAutoSave();
+  }
+}
+
+function handlePreviewPaneKeydown(event) {
+  if (event.target.matches('#preview-find-input')) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      movePreviewFind(event.shiftKey ? -1 : 1, { preserveFocus: true });
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closePreviewFindBar();
+    }
+    return;
+  }
+  if (event.target.matches('#remote-ai-prompt')) {
+    handleRemoteAiPromptHistoryKey(event);
+  }
+}
+
+function handlePreviewPaneScroll(event) {
+  if (event.target.matches('#body-editor')) {
+    syncEditableCodeHighlightScroll();
+    return;
+  }
+  if (event.target.matches('#remote-ai-script')) {
+    syncRemoteAiScriptHighlightScroll();
+    return;
+  }
+  if (event.target.matches('#remote-example-preview')) {
+    rememberRemoteExampleScroll();
+  }
+}
+
+function handlePreviewPaneFocusOut(event) {
+  if (event.target.matches('#preview-find-bar, #preview-find-bar *')) {
+    if (event.relatedTarget && els.previewFindBar.contains(event.relatedTarget)) return;
+    window.setTimeout(() => {
+      if (!els.previewFindBar.hidden && !els.previewFindBar.contains(document.activeElement)) {
+        closePreviewFindBar({ keepSelection: true });
+      }
+    });
+  }
+}
+
+function handlePreviewPaneBlur(event) {
+  if (event.target.matches('#capture-query-input')) {
+    commitCaptureQueryInput();
+    return;
+  }
+  if (event.target.matches('#body-editor')) {
+    commitCaptureBodyEditorOnBlur();
+  }
+}
+
 async function selectFirstVisibleItemForActiveTab() {
   if (state.activeTab === 'captures') {
     const captures = visibleCapturesForActiveWorkspace();
@@ -7672,6 +8343,7 @@ async function handleCapturesChangedEvent(data = {}) {
   if (data.mode === 'clear') {
     state.captures = [];
     state.selectedCaptureId = null;
+    clearPreviewPaneCache();
     state.previewOpenTabs = [];
     state.activePreviewTabId = '';
     persistPreviewWorkspaceAndSettings();
@@ -7694,10 +8366,18 @@ async function handleRulesChangedEvent(data = {}) {
   if (data.action === 'upsert' && data.rule) {
     if (data.kind === 'local') {
       replaceRuleInState(data.rule);
+      if (state.selectedRuleId === data.rule.id) {
+        updateRuleEditorTitle(data.rule);
+        syncRuleOptionControls(data.rule);
+      }
       renderRules();
     } else if (data.kind === 'remote') {
       replaceRemoteRuleInState(data.rule);
-      syncSelectedRemoteRuleFromState();
+      if (state.selectedRemoteRuleId === data.rule.id) {
+        renderSelectedRemoteRuleEditor();
+      } else {
+        syncSelectedRemoteRuleFromState();
+      }
       renderRemoteRules();
     } else {
       await reloadRules();
@@ -7707,15 +8387,9 @@ async function handleRulesChangedEvent(data = {}) {
   }
   if (data.action === 'delete' && data.id) {
     if (data.kind === 'local') {
-      state.rules = state.rules.filter((rule) => rule.id !== data.id);
-      prunePreviewWorkspaceTabs();
-      renderPreviewWorkspaceTabs();
-      renderRules();
+      await applyDeletedRule('local', data.id);
     } else if (data.kind === 'remote') {
-      state.remoteRules = state.remoteRules.filter((rule) => rule.id !== data.id);
-      prunePreviewWorkspaceTabs();
-      renderPreviewWorkspaceTabs();
-      renderRemoteRules();
+      await applyDeletedRule('remote', data.id);
     } else {
       await reloadRules();
     }
@@ -8693,6 +9367,9 @@ function normalizePreviewWorkspaceTabs(value = []) {
       type,
       targetId,
       bodyTab: normalizePreviewBodyTab(tab?.bodyTab),
+      ruleEditorMode: normalizePreviewRuleEditorMode(tab?.ruleEditorMode),
+      ruleEditorStepId: String(tab?.ruleEditorStepId || '').trim(),
+      remoteExampleTab: normalizeRemoteExampleTab(tab?.remoteExampleTab),
       title: String(tab?.title || '').trim()
     };
   }).filter(Boolean).reduce((tabs, tab) => {
@@ -8716,6 +9393,18 @@ function normalizePreviewBodyTab(tab) {
   return ['overview', 'query', 'requestHead', 'request', 'responseHead', 'response'].includes(value)
     ? value
     : 'response';
+}
+
+function normalizePreviewRuleEditorMode(mode) {
+  const value = String(mode || '').trim();
+  return ['list', 'dsl', 'ai'].includes(value) ? value : 'list';
+}
+
+function normalizeRemoteExampleTab(tab) {
+  const value = String(tab || '').trim();
+  return ['query', 'requestHead', 'responseHead', 'request', 'response'].includes(value)
+    ? value
+    : 'query';
 }
 
 function normalizePreviewWorkspaceActiveTabId(tabId, tabs = []) {
@@ -8780,6 +9469,7 @@ function ensurePreviewWorkspaceTabHistory(options = {}) {
 function persistPreviewWorkspaceToActiveCaptureTab() {
   const tab = activeCaptureTab();
   if (!tab) return;
+  syncCurrentPreviewWorkspaceTabState();
   tab.previewTabs = normalizePreviewWorkspaceTabs(state.previewOpenTabs);
   tab.activePreviewTabId = normalizePreviewWorkspaceActiveTabId(state.activePreviewTabId, tab.previewTabs);
   ensurePreviewWorkspaceTabHistory();
@@ -8798,7 +9488,9 @@ function restorePreviewWorkspaceFromActiveCaptureTab(options = {}) {
   }
   const activeTab = state.previewOpenTabs.find((item) => item.id === state.activePreviewTabId);
   if (activeTab && options.selectActive === true) {
-    selectPreviewWorkspaceTab(activeTab.id, { persist: false });
+    selectPreviewWorkspaceTab(activeTab.id, { persist: false }).catch((error) => {
+      console.error(error);
+    });
     return;
   }
   if (!activeTab) {
@@ -8835,7 +9527,9 @@ function restorePreviewWorkspaceActiveSelection() {
   const activeTab = activePreviewTabState();
   if (!activeTab || !previewWorkspaceTabExists(activeTab)) return;
   if (activeTab.id === selectedPreviewWorkspaceTabId()) return;
-  selectPreviewWorkspaceTab(activeTab.id, { persist: false });
+  selectPreviewWorkspaceTab(activeTab.id, { persist: false }).catch((error) => {
+    console.error(error);
+  });
 }
 
 function persistPreviewWorkspaceAndSettings(options = {}) {
@@ -9417,7 +10111,13 @@ function selectDomTextRange(root, start, end, options = {}) {
 }
 
 function markTextOffsets(root, start, end) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return isTextNodeVisible(node)
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    }
+  });
   let current = walker.nextNode();
   let offset = 0;
   let firstMarker = null;
@@ -9485,7 +10185,37 @@ function scrollableAncestor(element) {
 }
 
 function elementPlainText(element) {
-  return element?.textContent || '';
+  if (!element) return '';
+  if (!element.classList?.contains('collapsible-json-preview')) return element.textContent || '';
+  return visibleElementPlainText(element);
+}
+
+function visibleElementPlainText(element) {
+  if (!element) return '';
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return isTextNodeVisible(node)
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    }
+  });
+  let text = '';
+  let current = walker.nextNode();
+  while (current) {
+    text += current.nodeValue || '';
+    current = walker.nextNode();
+  }
+  return text;
+}
+
+function isTextNodeVisible(node) {
+  let current = node?.parentElement;
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    if (current.hidden) return false;
+    if (current.getAttribute('aria-hidden') === 'true') return false;
+    current = current.parentElement;
+  }
+  return true;
 }
 
 function getCurrentSelectionText() {
@@ -9618,6 +10348,7 @@ function saveDomainProjectFromDialog(options = {}) {
 function selectOrAddDomainProject(domain, options = {}) {
   const normalized = normalizeHostInput(domain);
   const existing = state.captureTabs.find((tab) => normalizeHostInput(tab.filter) === normalized && (normalized || !tab.filter));
+  parkActivePreviewPane();
   persistPreviewWorkspaceToActiveCaptureTab();
   const tab = existing || {
     id: createId('capture-tab'),
@@ -9664,6 +10395,7 @@ function switchCaptureWorkspaceTab(tabId) {
   const tab = state.captureTabs.find((item) => item.id === tabId);
   if (!tab) return;
   if (tab.id === state.activeCaptureTabId) return;
+  parkActivePreviewPane();
   persistPreviewWorkspaceToActiveCaptureTab();
   state.activeCaptureTabId = tab.id;
   state.captureFilter = tab.filter || '';
@@ -9685,7 +10417,9 @@ function switchCaptureWorkspaceTab(tabId) {
 function closeCaptureWorkspaceTab(tabId) {
   const tab = state.captureTabs.find((item) => item.id === tabId);
   if (!tab) return;
+  parkActivePreviewPane();
   persistPreviewWorkspaceToActiveCaptureTab();
+  clearPreviewPaneCacheForCaptureTab(tab.id);
   disposeTerminalInstancesForCaptureTab(tab);
   const isUnspecifiedTab = !normalizeHostInput(tab.filter);
   const remainingTabs = state.captureTabs.filter((item) => item.id !== tab.id);
@@ -10037,6 +10771,7 @@ function renderAdbProxyActions() {
   els.adbProxyActions.innerHTML = '';
   const available = state.adbDevices.filter((device) => device.available);
   if (!available.length) {
+    state.adbDeviceMenuOpen = false;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'adb-proxy-button rail-button';
@@ -10049,6 +10784,9 @@ function renderAdbProxyActions() {
   }
 
   const singleDevice = available.length === 1 ? available[0] : null;
+  if (singleDevice) {
+    state.adbDeviceMenuOpen = false;
+  }
   const hasCurrentProxyDevice = available.some((device) => device.matchesCurrentProxy);
   const hasForeignProxyDevice = !hasCurrentProxyDevice && available.some((device) => device.proxyEnabled);
   const button = document.createElement('button');
@@ -10077,6 +10815,9 @@ function renderAdbProxyActions() {
     });
   }
   els.adbProxyActions.append(button);
+  if (!singleDevice && state.adbDeviceMenuOpen) {
+    renderAdbDeviceMenu(available);
+  }
 }
 
 function adbNoDeviceMarkHtml() {
@@ -10113,23 +10854,25 @@ function adbDeviceTooltip(device) {
 }
 
 function toggleAdbDeviceMenu(devices) {
-  const existing = els.adbProxyActions.querySelector('.adb-device-menu');
-  if (existing && !existing.hidden) {
+  if (state.adbDeviceMenuOpen) {
     closeAdbDeviceMenu();
     return;
   }
+  state.adbDeviceMenuOpen = true;
   renderAdbDeviceMenu(devices);
 }
 
 function closeAdbDeviceMenu() {
-  const menu = els.adbProxyActions.querySelector('.adb-device-menu');
-  if (menu) {
-    menu.hidden = true;
-  }
+  state.adbDeviceMenuOpen = false;
+  removeAdbDeviceMenu();
+}
+
+function removeAdbDeviceMenu() {
+  els.adbProxyActions.querySelectorAll('.adb-device-menu').forEach((menu) => menu.remove());
 }
 
 function renderAdbDeviceMenu(devices) {
-  closeAdbDeviceMenu();
+  removeAdbDeviceMenu();
   const menu = document.createElement('div');
   menu.className = 'adb-device-menu';
   menu.addEventListener('click', (event) => {
@@ -10689,11 +11432,10 @@ function captureHistoryGroupKey(capture) {
 
 function showCaptureContextMenu(event, captureId) {
   const capture = findCaptureSummaryById(captureId);
-  const hasLocalRule = capture && state.rules.some((rule) => sameLocalRuleTarget(rule, captureRuleTarget(capture, 'local')));
   const hasRemoteRule = capture && state.remoteRules.some((rule) => !isGlobalRemoteRule(rule) && sameRemoteRuleTarget(rule, captureRuleTarget(capture, 'remote')));
   const actions = [
     {
-      label: hasLocalRule ? t('context.updateLocal') : t('context.createLocal'),
+      label: t('context.createLocal'),
       run: async () => {
         await ensureCaptureSelected(captureId);
         await saveSelectedCapture('exact');
@@ -11839,6 +12581,7 @@ async function clearAllCaptures() {
   closeClearCapturesMenu();
   if (!window.confirm(t('clear.confirmAllCaptures'))) return;
   state.selectedCaptureId = null;
+  clearPreviewPaneCache();
   state.previewOpenTabs = [];
   state.activePreviewTabId = '';
   resetPreviewWorkspaceTabHistory();
@@ -11888,6 +12631,7 @@ async function clearRules() {
   await fetch('/api/rules/all', { method: 'DELETE' });
   state.rules = [];
   state.remoteRules = [];
+  clearPreviewPaneCache();
   prunePreviewWorkspaceTabs();
   if (!state.previewOpenTabs.length) {
     state.activePreviewTabId = '';
@@ -12379,7 +13123,6 @@ function renderRemoteDslRows() {
       const editButton = createRemoteStepEditButton(t('remote.editAiRule'), () => openRemoteAiEditor(row.id));
       const summary = createRemoteStepSummaryInput(row, t('remote.aiDefaultSummary'));
       const deleteButton = createRemoteStepDeleteButton(row, t('remote.deleteAiRule'));
-      item.addEventListener('click', () => openRemoteAiEditor(row.id));
       item.append(dragHandle, enabledLabel, summary, editButton, deleteButton);
       els.remoteDslList.append(item);
       continue;
@@ -12388,7 +13131,6 @@ function renderRemoteDslRows() {
     const editButton = createRemoteStepEditButton(t('remote.editManualRule'), () => openRemoteDslStepEditor(row.id));
     const summary = createRemoteStepSummaryInput(row, t('remote.manualDefaultSummary'));
     const deleteButton = createRemoteStepDeleteButton(row, t('remote.deleteManualRule'));
-    item.addEventListener('click', () => openRemoteDslStepEditor(row.id));
     item.append(dragHandle, enabledLabel, summary, editButton, deleteButton);
     els.remoteDslList.append(item);
   }
@@ -12681,6 +13423,8 @@ function openRemoteDslEditor() {
   state.selectedAiStepId = '';
   state.selectedDslStepId = '';
   setPreviewBodyTab('response');
+  syncCurrentPreviewWorkspaceTabState();
+  persistPreviewWorkspaceAndSettings();
   renderRemoteRuleEditorMode();
   scheduleRemotePreview();
 }
@@ -12696,6 +13440,8 @@ function openRemoteDslStepEditor(stepId = '') {
   state.selectedAiStepId = '';
   setPreviewBodyTab('response');
   syncRemoteExampleTabForDslAction(dslStep.action);
+  syncCurrentPreviewWorkspaceTabState();
+  persistPreviewWorkspaceAndSettings();
   renderRemoteRuleEditorMode();
   scheduleRemotePreview();
   window.requestAnimationFrame(() => {
@@ -12714,6 +13460,8 @@ function openRemoteAiEditor(stepId = '') {
   state.selectedDslStepId = '';
   resetRemoteAiPromptHistoryCursor();
   setPreviewBodyTab('response');
+  syncCurrentPreviewWorkspaceTabState();
+  persistPreviewWorkspaceAndSettings();
   renderRemoteRuleEditorMode();
   scheduleRemotePreview();
   window.requestAnimationFrame(() => {
@@ -12901,7 +13649,7 @@ function renderBodyCodePreview(body, tab) {
   }
   els.bodyHighlight.dataset.language = language.label;
   els.bodyHighlight.tabIndex = 0;
-  els.bodyHighlight.innerHTML = highlightCodeHtml(text || ' ', language.kind);
+  renderCodePreview(els.bodyHighlight, text || ' ', language.kind);
   els.bodyHighlight.hidden = false;
   setBodyEditorStackVisible(true);
   setBodyTextareaVisible(false);
@@ -12929,7 +13677,7 @@ function renderCaptureBodyOriginalPreview(capture, options = {}) {
   const original = requestBodyText(sourceCapture?.requestBody);
   const language = detectPreviewLanguage(original, 'request');
   els.captureBodyOriginal.tabIndex = 0;
-  els.captureBodyOriginal.innerHTML = highlightCodeHtml(original || ' ', language.kind);
+  renderCodePreview(els.captureBodyOriginal, original || ' ', language.kind);
   els.captureBodyOriginal.hidden = false;
 }
 
@@ -12977,14 +13725,20 @@ function syncEditableCodeHighlightScroll() {
   }
 }
 
+function insertChildBefore(parent, child, reference = null) {
+  if (!parent || !child) return;
+  const safeReference = reference?.parentElement === parent ? reference : null;
+  parent.insertBefore(child, safeReference);
+}
+
 function updateFormatBodyButton() {
   if (!els.formatBodyBtn) return;
   const target = formatBodyButtonTarget();
   if (target && els.formatBodyBtn.parentElement !== target) {
-    target.insertBefore(els.formatBodyBtn, target.firstElementChild);
+    insertChildBefore(target, els.formatBodyBtn, target.firstElementChild);
   }
   if (target && els.manualRuleSaveBtn?.parentElement !== target) {
-    target.insertBefore(els.manualRuleSaveBtn, els.formatBodyBtn.nextSibling);
+    insertChildBefore(target, els.manualRuleSaveBtn, els.formatBodyBtn.nextSibling || target.firstElementChild);
   }
   els.responseBodyToolbar.hidden = !shouldShowResponseBodyToolbar();
   const canFormat = Boolean(target) &&
@@ -13031,10 +13785,10 @@ function placeFormatBodyButton() {
   if (!els.formatBodyBtn) return;
   const target = formatBodyButtonTarget();
   if (target && els.formatBodyBtn.parentElement !== target) {
-    target.insertBefore(els.formatBodyBtn, target.firstElementChild);
+    insertChildBefore(target, els.formatBodyBtn, target.firstElementChild);
   }
   if (target && els.manualRuleSaveBtn?.parentElement !== target) {
-    target.insertBefore(els.manualRuleSaveBtn, els.formatBodyBtn.nextSibling);
+    insertChildBefore(target, els.manualRuleSaveBtn, els.formatBodyBtn.nextSibling || target.firstElementChild);
   }
   updateManualRuleSaveButton();
 }
@@ -13083,16 +13837,16 @@ function updateManualRuleSaveButton() {
 function placeManualRuleSaveButton(target) {
   if (!target) return;
   if (target === els.ruleQueryEditor) {
-    target.insertBefore(els.manualRuleSaveBtn, document.querySelector('#rule-query-match-row'));
+    insertChildBefore(target, els.manualRuleSaveBtn, target.querySelector('#rule-query-match-row'));
     return;
   }
   if (target === els.captureQueryEditor) {
     const mergeBar = target.querySelector('.query-merge-bar');
-    mergeBar?.insertBefore(els.manualRuleSaveBtn, target.querySelector('#capture-query-merge-row'));
+    insertChildBefore(mergeBar, els.manualRuleSaveBtn, target.querySelector('#capture-query-merge-row'));
     return;
   }
   if (els.manualRuleSaveBtn.parentElement === target) return;
-  target.insertBefore(els.manualRuleSaveBtn, els.formatBodyBtn?.nextSibling || target.firstElementChild);
+  insertChildBefore(target, els.manualRuleSaveBtn, els.formatBodyBtn?.nextSibling || target.firstElementChild);
 }
 
 function manualRuleSaveButtonTarget() {
@@ -13138,6 +13892,19 @@ function highlightCodeHtml(source, kind) {
   if (kind === 'headers') return headersHighlightHtml(source);
   if (kind === 'query') return queryHighlightHtml(source);
   return escapeHtml(source);
+}
+
+function renderCodePreview(element, source, kind) {
+  if (!element) return;
+  element.classList.remove('collapsible-json-preview');
+  if (kind !== 'json') {
+    element.innerHTML = highlightCodeHtml(source, kind);
+    return;
+  }
+  const preview = collapsibleJsonPreviewHtml(source);
+  element.innerHTML = preview.html;
+  element.classList.toggle('collapsible-json-preview', preview.collapsible);
+  if (preview.collapsible) bindCollapsibleJsonPreview(element);
 }
 
 function highlightInlineCodeHtml(source, kind) {
@@ -13197,6 +13964,173 @@ function jsonHighlightHtml(source) {
   }
   html += escapeHtml(source.slice(lastIndex));
   return html;
+}
+
+function collapsibleJsonPreviewHtml(source) {
+  const rawJsonSource = String(extractJsonLikeText(source) || source || '');
+  if (rawJsonSource.length > collapsibleJsonPreviewMaxChars) {
+    const formattedSource = formatJsonForPreview(rawJsonSource);
+    return {
+      html: jsonHighlightHtml(formattedSource || ' '),
+      collapsible: false
+    };
+  }
+  const jsonSource = formatJsonForPreview(rawJsonSource);
+  const parsed = parseJson(jsonSource);
+  if (!parsed.ok) {
+    return {
+      html: jsonHighlightHtml(jsonSource || ' '),
+      collapsible: false
+    };
+  }
+  return {
+    html: `<span class="json-tree-preview">${jsonTreeNodeHtml(parsed.value, {
+      depth: 0,
+      path: 'root',
+      trailingComma: false
+    })}</span>`,
+    collapsible: true
+  };
+}
+
+function jsonTreeNodeHtml(value, options = {}) {
+  const depth = Number(options.depth || 0);
+  const path = String(options.path || 'root');
+  const keyHtml = options.keyHtml || '';
+  const trailingComma = options.trailingComma === true;
+  if (Array.isArray(value)) {
+    return jsonTreeCollectionHtml(value, {
+      depth,
+      path,
+      keyHtml,
+      trailingComma,
+      open: '[',
+      close: ']',
+      entries: value.map((item, index) => ({
+        key: index,
+        value: item,
+        keyHtml: ''
+      }))
+    });
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value).map(([key, item]) => ({
+      key,
+      value: item,
+      keyHtml: `<span class="code-token-key">${escapeHtml(JSON.stringify(key))}</span><span class="code-token-punctuation">: </span>`
+    }));
+    return jsonTreeCollectionHtml(value, {
+      depth,
+      path,
+      keyHtml,
+      trailingComma,
+      open: '{',
+      close: '}',
+      entries
+    });
+  }
+  return jsonTreeLineHtml({
+    depth,
+    toggle: false,
+    content: `${keyHtml}${jsonPrimitiveHtml(value)}${trailingComma ? '<span class="code-token-punctuation">,</span>' : ''}`
+  });
+}
+
+function jsonTreeCollectionHtml(value, options = {}) {
+  const entries = options.entries || [];
+  const depth = Number(options.depth || 0);
+  const path = String(options.path || 'root');
+  const keyHtml = options.keyHtml || '';
+  const trailingComma = options.trailingComma === true;
+  const open = options.open || '{';
+  const close = options.close || '}';
+  if (!entries.length) {
+    return jsonTreeLineHtml({
+      depth,
+      toggle: false,
+      content: `${keyHtml}<span class="code-token-punctuation">${escapeHtml(open)}${escapeHtml(close)}</span>${trailingComma ? '<span class="code-token-punctuation">,</span>' : ''}`
+    });
+  }
+  const encodedPath = escapeHtml(path);
+  const children = entries.map((entry, index) => jsonTreeNodeHtml(entry.value, {
+    depth: depth + 1,
+    path: `${path}.${encodeURIComponent(String(entry.key))}`,
+    keyHtml: entry.keyHtml,
+    trailingComma: index < entries.length - 1
+  })).join('');
+  const summaryText = Array.isArray(value)
+    ? `${entries.length} ${entries.length === 1 ? 'item' : 'items'}`
+    : `${entries.length} ${entries.length === 1 ? 'key' : 'keys'}`;
+  return '<span class="json-tree-node" data-json-path="' + encodedPath + '">' +
+    jsonTreeLineHtml({
+      depth,
+      toggle: true,
+      content: `${keyHtml}<span class="code-token-punctuation">${escapeHtml(open)}</span><span class="json-fold-summary" hidden> ${escapeHtml(summaryText)} <span class="code-token-punctuation">${escapeHtml(close)}</span></span>${trailingComma ? '<span class="json-fold-comma code-token-punctuation" hidden>,</span>' : ''}`
+    }) +
+    `<span class="json-tree-children">${children}</span>` +
+    jsonTreeLineHtml({
+      depth,
+      toggle: false,
+      closeLine: true,
+      content: `<span class="code-token-punctuation">${escapeHtml(close)}${trailingComma ? ',' : ''}</span>`
+    }) +
+    '</span>';
+}
+
+function jsonTreeLineHtml(options = {}) {
+  const depth = Number(options.depth || 0);
+  const toggle = options.toggle === true;
+  const closeLine = options.closeLine === true;
+  return `<span class="json-tree-line${closeLine ? ' json-tree-close-line' : ''}" style="--json-depth: ${depth}">${toggle
+    ? '<button class="json-fold-toggle" type="button" tabindex="-1" aria-expanded="true" aria-label="Toggle JSON node"></button>'
+    : '<span class="json-fold-spacer"></span>'}<span class="json-tree-code">${options.content || ''}</span></span>`;
+}
+
+function jsonPrimitiveHtml(value) {
+  if (typeof value === 'string') {
+    return `<span class="code-token-string">${escapeHtml(JSON.stringify(value))}</span>`;
+  }
+  if (typeof value === 'number') {
+    return `<span class="code-token-number">${escapeHtml(String(value))}</span>`;
+  }
+  if (typeof value === 'boolean') {
+    return `<span class="code-token-boolean">${value ? 'true' : 'false'}</span>`;
+  }
+  if (value === null) {
+    return '<span class="code-token-null">null</span>';
+  }
+  return escapeHtml(JSON.stringify(value));
+}
+
+function bindCollapsibleJsonPreview(element) {
+  if (element.dataset.jsonFoldBound === 'true') return;
+  element.dataset.jsonFoldBound = 'true';
+  element.addEventListener('click', (event) => {
+    const button = event.target?.closest?.('.json-fold-toggle');
+    if (!button || !element.contains(button)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleJsonPreviewNode(button);
+  });
+}
+
+function toggleJsonPreviewNode(button) {
+  const node = button.closest('.json-tree-node');
+  if (!node) return;
+  const collapsed = !node.classList.contains('collapsed');
+  node.classList.toggle('collapsed', collapsed);
+  button.setAttribute('aria-expanded', String(!collapsed));
+  const children = node.querySelector(':scope > .json-tree-children');
+  const closeLine = node.querySelector(':scope > .json-tree-close-line');
+  const summary = node.querySelector(':scope > .json-tree-line .json-fold-summary');
+  const comma = node.querySelector(':scope > .json-tree-line .json-fold-comma');
+  if (children) children.hidden = collapsed;
+  if (closeLine) closeLine.hidden = collapsed;
+  if (summary) summary.hidden = !collapsed;
+  if (comma) comma.hidden = !collapsed;
+  if (state.previewFindOpen && state.previewFindQuery) {
+    updatePreviewFind(state.previewFindQuery, { select: false });
+  }
 }
 
 function headersHighlightHtml(source) {
@@ -13957,6 +14891,8 @@ async function updateRemotePreview() {
 function setRemoteExampleTab(tab) {
   rememberRemoteExampleScroll();
   state.remoteExampleTab = tab;
+  syncCurrentPreviewWorkspaceTabState();
+  persistPreviewWorkspaceAndSettings();
   renderRemoteExample();
 }
 
@@ -14020,7 +14956,7 @@ function renderRemoteExampleCodePreview(tab, text) {
   const language = detectPreviewLanguage(text, tab);
   els.remoteExamplePreview.tabIndex = 0;
   els.remoteExamplePreview.dataset.language = language.label;
-  els.remoteExamplePreview.innerHTML = highlightCodeHtml(text || ' ', language.kind);
+  renderCodePreview(els.remoteExamplePreview, text || ' ', language.kind);
 }
 
 function remoteExampleDiffForTab(tab, result) {
@@ -14608,11 +15544,8 @@ async function saveSelectedRemoteRule() {
   if (!state.selectedCaptureId) return;
   const result = await postJson(`/api/captures/${state.selectedCaptureId}/remote-rule`, {});
   showRuleWarning(result);
-  state.selectedRemoteRuleId = result.rule.id;
-  state.selectedRuleId = null;
-  state.selectedCaptureId = null;
+  replaceRemoteRuleInState(result.rule);
   setActiveTab('remote', { autoSelect: false });
-  await reloadRules();
   await selectRemoteRule(result.rule.id);
 }
 
@@ -14743,17 +15676,20 @@ function findCaptureForRule(rule) {
 async function saveLocal(captureId, queryMode) {
   const result = await postJson(`/api/captures/${captureId}/local`, { queryMode });
   showRuleWarning(result);
-  state.selectedRuleId = result.rule.id;
-  state.selectedRemoteRuleId = null;
-  state.selectedCaptureId = null;
+  if (!result?.rule?.id) return;
+  replaceRuleInState(result.rule);
   setActiveTab('rules', { autoSelect: false });
-  await reloadRules();
   await selectRule(result.rule.id);
+  keepListFocus(els.rules, result.rule.id, `.rule[data-rule-id="${cssEscape(result.rule.id)}"]`);
 }
 
 async function selectCapture(captureId, options = {}) {
-  clearManualRuleSaveRequired();
-  openCapturePreviewTab(captureId);
+  const targetTabId = previewWorkspaceTabId('capture', captureId);
+  if (state.activePreviewTabId && state.activePreviewTabId !== targetTabId) {
+    await preparePreviewPaneSwitch();
+  } else if (selectedPreviewWorkspaceTabId() === targetTabId) {
+    await flushCurrentRuleAutoSaveSafely();
+  }
   if (state.previewMode === 'capture' && state.selectedCaptureId === captureId && state.selectedCaptureDetail?.id === captureId) {
     renderPreviewWorkspaceTabs();
     renderCaptures();
@@ -14763,6 +15699,11 @@ async function selectCapture(captureId, options = {}) {
     }
     return;
   }
+  const previousTabId = state.activePreviewTabId;
+  const nextTab = openCapturePreviewTab(captureId);
+  const paneResult = ensurePreviewPaneForTab(nextTab?.id);
+  if (previousTabId && nextTab?.id && previousTabId !== nextTab.id && paneResult.restored) return;
+  clearManualRuleSaveRequired();
   const tabState = activePreviewTabState();
   const preserveCapturePreviewTab = state.previewMode === 'capture' || Boolean(tabState?.bodyTab);
   if (tabState?.bodyTab) {
@@ -14792,12 +15733,12 @@ async function selectCapture(captureId, options = {}) {
   try {
     result = await getCaptureDetail(captureId);
   } catch (error) {
-    if (requestId !== state.captureSelectRequestId) return;
+    if (requestId !== state.captureSelectRequestId || state.activePreviewTabId !== nextTab?.id) return;
     console.error(error);
     renderFailedCapturePreview(summary, error, { preserveCurrentTab: preserveCapturePreviewTab });
     return;
   }
-  if (requestId !== state.captureSelectRequestId) return;
+  if (requestId !== state.captureSelectRequestId || state.activePreviewTabId !== nextTab?.id) return;
   state.selectedCaptureDetail = result;
   if (options.keepSelectedRule === true) {
     state.selectedRuleId = keepSelectedRule;
@@ -14847,6 +15788,7 @@ async function selectCapture(captureId, options = {}) {
   renderRules();
   renderRemoteRules();
   renderPreviewWorkspaceTabs();
+  adoptLivePreviewPane(nextTab?.id);
 }
 
 function openCapturePreviewTab(captureId) {
@@ -14865,6 +15807,7 @@ function openCapturePreviewTab(captureId) {
     };
     state.previewOpenTabs.push(tab);
   }
+  syncCurrentPreviewWorkspaceTabState();
   state.activePreviewTabId = tab.id;
   if (!state.suppressPreviewTabVisit) {
     rememberPreviewWorkspaceTabVisit(tab.id);
@@ -14878,6 +15821,33 @@ function openCapturePreviewTab(captureId) {
 function activePreviewTabState() {
   if (!state.activePreviewTabId) return null;
   return state.previewOpenTabs.find((tab) => tab.id === state.activePreviewTabId) || null;
+}
+
+function syncCurrentPreviewWorkspaceTabState() {
+  const tab = activePreviewTabState();
+  if (!tab) return;
+  if (tab.id !== selectedPreviewWorkspaceTabId()) return;
+  tab.bodyTab = normalizePreviewBodyTab(state.previewBodyTab);
+  if (tab.type === 'remote') {
+    tab.ruleEditorMode = currentRemoteRuleEditorMode();
+    tab.ruleEditorStepId = currentRemoteRuleEditorStepId();
+    tab.remoteExampleTab = normalizeRemoteExampleTab(state.remoteExampleTab);
+  } else if (tab.type === 'rule') {
+    tab.ruleEditorMode = 'list';
+    tab.ruleEditorStepId = '';
+  }
+}
+
+function currentRemoteRuleEditorMode() {
+  if (state.selectedAiStepId) return 'ai';
+  if (state.selectedDslStepId) return 'dsl';
+  return 'list';
+}
+
+function currentRemoteRuleEditorStepId() {
+  if (state.selectedAiStepId) return state.selectedAiStepId;
+  if (state.selectedDslStepId) return state.selectedDslStepId;
+  return '';
 }
 
 function previewWorkspaceTabId(type, targetId) {
@@ -15024,6 +15994,7 @@ function openRulePreviewTab(ruleId, type) {
     };
     state.previewOpenTabs.push(tab);
   }
+  syncCurrentPreviewWorkspaceTabState();
   state.activePreviewTabId = tab.id;
   if (!state.suppressPreviewTabVisit) {
     rememberPreviewWorkspaceTabVisit(tab.id);
@@ -15036,12 +16007,14 @@ function openRulePreviewTab(ruleId, type) {
 
 function trimPreviewWorkspaceTabs() {
   if (!Array.isArray(state.previewOpenTabs)) {
+    clearPreviewPaneCache();
     state.previewOpenTabs = [];
     return;
   }
   while (state.previewOpenTabs.length > previewWorkspaceTabLimit) {
     const removableIndex = state.previewOpenTabs.findIndex((tab) => tab.id !== state.activePreviewTabId);
-    state.previewOpenTabs.splice(removableIndex >= 0 ? removableIndex : 0, 1);
+    const [removed] = state.previewOpenTabs.splice(removableIndex >= 0 ? removableIndex : 0, 1);
+    removeCachedPreviewPane(removed?.id);
   }
 }
 
@@ -15081,7 +16054,9 @@ function renderPreviewWorkspaceTabs() {
         closePreviewWorkspaceTab(tab.id);
         return;
       }
-      selectPreviewWorkspaceTab(tab.id);
+      selectPreviewWorkspaceTab(tab.id).catch((error) => {
+        console.error(error);
+      });
     });
     button.addEventListener('dragstart', (event) => {
       if (event.target.closest('.preview-workspace-tab-leading')) {
@@ -15185,16 +16160,21 @@ function prunePreviewWorkspaceTabs(options = {}) {
   state.previewOpenTabs = state.previewOpenTabs.filter((tab) => previewWorkspaceTabExists(tab));
   if (beforeActive && !state.previewOpenTabs.some((tab) => tab.id === beforeActive)) {
     const nextTabId = state.previewOpenTabs[0]?.id || '';
-    state.activePreviewTabId = nextTabId;
     if (options.selectReplacement !== false) {
       clearCurrentPreviewSelection();
       if (nextTabId) {
-        selectPreviewWorkspaceTab(nextTabId, { persist: options.persist !== false });
+        selectPreviewWorkspaceTab(nextTabId, { persist: options.persist !== false }).catch((error) => {
+          console.error(error);
+        });
       } else {
+        state.activePreviewTabId = '';
         clearPreview();
       }
     } else if (!nextTabId) {
+      state.activePreviewTabId = '';
       clearPreview();
+    } else {
+      state.activePreviewTabId = nextTabId;
     }
   }
   if (options.persist !== false && beforeLength !== state.previewOpenTabs.length) {
@@ -15321,12 +16301,12 @@ function handlePreviewWorkspaceBrowserHistory(event) {
   }
   state.suppressPreviewTabVisit = true;
   state.suppressBrowserPreviewHistory = true;
-  try {
-    selectPreviewWorkspaceTab(tabId, { remember: false });
-  } finally {
+  selectPreviewWorkspaceTab(tabId, { remember: false }).catch((error) => {
+    console.error(error);
+  }).finally(() => {
     state.suppressPreviewTabVisit = false;
     state.suppressBrowserPreviewHistory = false;
-  }
+  });
   scheduleRevealActivePreviewWorkspaceTab();
 }
 
@@ -15339,19 +16319,20 @@ function switchPreviewWorkspaceTabHistory(delta) {
   if (!state.previewOpenTabs.some((tab) => tab.id === tabId)) return false;
   state.previewTabHistoryIndex = nextIndex;
   state.suppressPreviewTabVisit = true;
-  try {
-    selectPreviewWorkspaceTab(tabId, { remember: false });
-  } finally {
+  selectPreviewWorkspaceTab(tabId, { remember: false }).then(() => {
+    syncBrowserPreviewHistory({ replace: true });
+    scheduleRevealActivePreviewWorkspaceTab();
+  }).catch((error) => {
+    console.error(error);
+  }).finally(() => {
     state.suppressPreviewTabVisit = false;
-  }
-  syncBrowserPreviewHistory({ replace: true });
-  scheduleRevealActivePreviewWorkspaceTab();
+  });
   return true;
 }
 
 function shouldHandlePreviewWorkspaceHistoryShortcut(target, options = {}) {
+  if (isTextEntryElement(target)) return false;
   if (options.global !== true) {
-    if (isTextEntryElement(target)) return false;
     if (els.terminalPanel?.contains(target)) return false;
   }
   if (els.globalSearchDialog?.open) return false;
@@ -15393,10 +16374,14 @@ function clearCurrentPreviewSelection() {
   state.selectedCaptureDetail = null;
 }
 
-function selectPreviewWorkspaceTab(tabId, options = {}) {
+async function selectPreviewWorkspaceTab(tabId, options = {}) {
   if (!tabId) return;
   const tab = state.previewOpenTabs.find((item) => item.id === tabId);
   if (!tab) return;
+  syncCurrentPreviewWorkspaceTabState();
+  if (state.activePreviewTabId && state.activePreviewTabId !== tab.id) {
+    await preparePreviewPaneSwitch();
+  }
   rememberWorkspaceFocus('preview');
   state.activePreviewTabId = tab.id;
   scheduleRevealActivePreviewWorkspaceTab();
@@ -15406,25 +16391,24 @@ function selectPreviewWorkspaceTab(tabId, options = {}) {
   if (options.persist !== false) {
     persistPreviewWorkspaceAndSettings();
   }
+  const paneResult = ensurePreviewPaneForTab(tab.id);
+  if (paneResult.restored) {
+    setActiveTab(tab.type === 'capture' ? 'captures' : tab.type === 'rule' ? 'rules' : 'remote', { autoSelect: false });
+    return;
+  }
   if (tab.type === 'capture') {
     setActiveTab('captures', { autoSelect: false });
-    selectCapture(tab.targetId).catch((error) => {
-      console.error(error);
-    });
+    await selectCapture(tab.targetId);
     return;
   }
   if (tab.type === 'rule') {
     setActiveTab('rules', { autoSelect: false });
-    selectRule(tab.targetId).catch((error) => {
-      console.error(error);
-    });
+    await selectRule(tab.targetId, { tabState: tab });
     return;
   }
   if (tab.type === 'remote') {
     setActiveTab('remote', { autoSelect: false });
-    selectRemoteRule(tab.targetId).catch((error) => {
-      console.error(error);
-    });
+    await selectRemoteRule(tab.targetId, { tabState: tab });
   }
 }
 
@@ -15434,6 +16418,15 @@ function closePreviewWorkspaceTab(tabId) {
   if (index < 0) return;
   const wasActive = state.activePreviewTabId === tabId;
   state.previewOpenTabs.splice(index, 1);
+  if (wasActive) {
+    const pane = livePreviewPane();
+    const key = previewPaneCacheKey(tabId);
+    if (pane && activePreviewPaneCacheKey === key) {
+      pane.remove();
+      activePreviewPaneCacheKey = '';
+    }
+  }
+  removeCachedPreviewPane(tabId);
   prunePreviewWorkspaceTabHistory();
   if (!wasActive) {
     renderPreviewWorkspaceTabs();
@@ -15443,9 +16436,10 @@ function closePreviewWorkspaceTab(tabId) {
   }
   const next = state.previewOpenTabs[Math.max(0, index - 1)] || state.previewOpenTabs[0] || null;
   if (next) {
-    state.activePreviewTabId = next.id;
     renderPreviewWorkspaceTabs();
-    selectPreviewWorkspaceTab(next.id);
+    selectPreviewWorkspaceTab(next.id).catch((error) => {
+      console.error(error);
+    });
     restorePreviewWorkspaceFocus();
     return;
   }
@@ -15601,19 +16595,38 @@ function preferredMappedRemoteRuleId(capture = {}) {
   }) || ids[0] || '';
 }
 
-async function selectRule(ruleId) {
-  await flushCurrentRuleAutoSave();
-  clearManualRuleSaveRequired();
+async function selectRule(ruleId, options = {}) {
   const rule = state.rules.find((item) => item.id === ruleId);
   if (!rule) return;
+  const targetTabId = previewWorkspaceTabId('rule', ruleId);
+  if (state.activePreviewTabId && state.activePreviewTabId !== targetTabId) {
+    await preparePreviewPaneSwitch();
+  } else if (selectedPreviewWorkspaceTabId() === targetTabId) {
+    await flushCurrentRuleAutoSaveSafely();
+  }
+  if (state.previewMode === 'rule' && state.selectedRuleId === ruleId && state.activePreviewTabId === targetTabId) {
+    renderPreviewWorkspaceTabs();
+    renderCaptures();
+    renderRules();
+    renderRemoteRules();
+    updateManualRuleSaveButton();
+    return;
+  }
   state.expandedRuleHitCaptures.clear();
-  openRulePreviewTab(ruleId, 'rule');
+  const tabState = previewWorkspaceTabStateFor('rule', ruleId, options.tabState);
+  const previousTabId = state.activePreviewTabId;
+  const nextTab = openRulePreviewTab(ruleId, 'rule');
+  const paneResult = ensurePreviewPaneForTab(nextTab?.id);
+  if (previousTabId && nextTab?.id && previousTabId !== nextTab.id && paneResult.restored) return;
+  clearManualRuleSaveRequired();
+  restorePreviewBodyTabFromTabState(tabState);
   state.selectedRuleId = ruleId;
   state.selectedRemoteRuleId = null;
   state.selectedCaptureId = null;
   state.selectedCaptureDetail = null;
 
   const result = await getJson(`/api/rules/${ruleId}/body`);
+  if (state.activePreviewTabId !== nextTab?.id || state.selectedRuleId !== ruleId) return;
   setGlobalRemoteHeadEditorVisible(false);
   const noteText = displayNoteText(rule);
   els.editorTitle.textContent = '';
@@ -15629,6 +16642,7 @@ async function selectRule(ruleId) {
       ? ['query', 'request', 'response']
       : ['query', 'response'],
     defaultTab: 'response',
+    preserveCurrentTab: Boolean(tabState?.bodyTab),
     requestHead: {
       body: formatHeadersPreview(rule.requestHeaders),
       readOnly: true
@@ -15651,15 +16665,34 @@ async function selectRule(ruleId) {
   renderRules();
   renderRemoteRules();
   renderPreviewWorkspaceTabs();
+  adoptLivePreviewPane(nextTab?.id);
 }
 
-async function selectRemoteRule(ruleId) {
-  await flushCurrentRuleAutoSave();
-  clearManualRuleSaveRequired();
+async function selectRemoteRule(ruleId, options = {}) {
   const rule = state.remoteRules.find((item) => item.id === ruleId);
   if (!rule) return;
+  const targetTabId = previewWorkspaceTabId('remote', ruleId);
+  if (state.activePreviewTabId && state.activePreviewTabId !== targetTabId) {
+    await preparePreviewPaneSwitch();
+  } else if (selectedPreviewWorkspaceTabId() === targetTabId) {
+    await flushCurrentRuleAutoSaveSafely();
+  }
+  if (state.previewMode === 'remote' && state.selectedRemoteRuleId === ruleId && state.activePreviewTabId === targetTabId) {
+    renderPreviewWorkspaceTabs();
+    renderCaptures();
+    renderRules();
+    renderRemoteRules();
+    updateManualRuleSaveButton();
+    return;
+  }
   state.expandedRuleHitCaptures.clear();
-  openRulePreviewTab(ruleId, 'remote');
+  const tabState = previewWorkspaceTabStateFor('remote', ruleId, options.tabState);
+  const previousTabId = state.activePreviewTabId;
+  const nextTab = openRulePreviewTab(ruleId, 'remote');
+  const paneResult = ensurePreviewPaneForTab(nextTab?.id);
+  if (previousTabId && nextTab?.id && previousTabId !== nextTab.id && paneResult.restored) return;
+  clearManualRuleSaveRequired();
+  restorePreviewBodyTabFromTabState(tabState);
   state.selectedRemoteRuleId = ruleId;
   state.selectedRuleId = null;
   state.selectedCaptureId = null;
@@ -15677,12 +16710,9 @@ async function selectRemoteRule(ruleId) {
   els.globalRemoteHostInput.value = rule.host || '';
   els.globalRemoteEnabled.checked = rule.enabled !== false;
   state.remoteSteps = parseRemoteScriptForEditor(rule.script, rule);
-  state.selectedAiStepId = state.remoteSteps.some((step) => step.id === state.selectedAiStepId && step.type === 'ai')
-    ? state.selectedAiStepId
-    : '';
-  state.selectedDslStepId = '';
-  state.remoteExampleScroll = {};
+  applyRemoteRuleTabState(tabState);
   const result = await getJson(`/api/remote-rules/${ruleId}/body`);
+  if (state.activePreviewTabId !== nextTab?.id || state.selectedRemoteRuleId !== ruleId) return;
   const requestBodyEditable = Boolean(result.requestBody?.editable);
   setPreviewBodies({
     mode: 'remote',
@@ -15692,6 +16722,7 @@ async function selectRemoteRule(ruleId) {
       ? ['query', 'request', 'response']
       : ['query', 'response'],
     defaultTab: 'response',
+    preserveCurrentTab: Boolean(tabState?.bodyTab),
     requestHead: {
       body: formatHeadersPreview(rule.requestHeaders),
       readOnly: true
@@ -15716,6 +16747,32 @@ async function selectRemoteRule(ruleId) {
   renderRules();
   renderRemoteRules();
   renderPreviewWorkspaceTabs();
+  adoptLivePreviewPane(nextTab?.id);
+}
+
+function applyRemoteRuleTabState(tabState = {}) {
+  const stateFromTab = tabState || {};
+  const mode = normalizePreviewRuleEditorMode(stateFromTab.ruleEditorMode);
+  const stepId = String(stateFromTab.ruleEditorStepId || '').trim();
+  state.selectedAiStepId = '';
+  state.selectedDslStepId = '';
+  if (mode === 'ai' && state.remoteSteps.some((step) => step.id === stepId && step.type === 'ai')) {
+    state.selectedAiStepId = stepId;
+  } else if (mode === 'dsl' && state.remoteSteps.some((step) => step.id === stepId && step.type !== 'ai')) {
+    state.selectedDslStepId = stepId;
+  }
+  state.remoteExampleTab = normalizeRemoteExampleTab(stateFromTab.remoteExampleTab);
+}
+
+function previewWorkspaceTabStateFor(type, targetId, providedTab = null) {
+  const tabId = previewWorkspaceTabId(type, targetId);
+  if (providedTab?.id === tabId) return providedTab;
+  return state.previewOpenTabs.find((tab) => tab.id === tabId) || null;
+}
+
+function restorePreviewBodyTabFromTabState(tabState = null) {
+  if (!tabState?.bodyTab) return;
+  state.previewBodyTab = normalizePreviewBodyTab(tabState.bodyTab);
 }
 
 async function saveCurrentRule(options = {}) {
@@ -15933,7 +16990,7 @@ function ruleConflictMessage(error) {
 
 function ruleConflictText(conflict) {
   const target = conflict?.rule ? ruleDisplayTitle(conflict.rule) : t('merge.otherRule');
-  return t('merge.conflictWithRule', { target });
+  return t('merge.duplicateWithRule', { target });
 }
 
 function ruleDisplayTitle(rule = {}) {
@@ -15980,6 +17037,7 @@ function duplicateRuleForCandidate(candidate) {
   ];
   const rule = candidates.find((item) => (
     item?.id !== candidate.id &&
+    item?.enabled !== false &&
     sameBaseRuleTarget(item, candidate) &&
     sameRuleCoverageForDuplicate(item, candidate)
   ));
@@ -15987,7 +17045,7 @@ function duplicateRuleForCandidate(candidate) {
 }
 
 function sameRuleCoverageForDuplicate(rule, target) {
-  return ruleCoversRuleForDuplicate(rule, target) ||
+  return ruleCoversRuleForDuplicate(rule, target) &&
     ruleCoversRuleForDuplicate(target, rule);
 }
 
@@ -16155,22 +17213,18 @@ function showRuleWarning(result) {
 }
 
 async function deleteRule(ruleId) {
+  const replacementId = replacementRuleIdAfterDelete('local', ruleId);
   await fetch(`/api/rules/${ruleId}`, { method: 'DELETE' });
-  if (state.selectedRuleId === ruleId) {
-    state.selectedRuleId = null;
-    clearPreview();
-  }
+  await applyDeletedRule('local', ruleId, { replacementId });
   await reloadRules();
 }
 
 async function deleteSelectedRule() {
   if (state.selectedRemoteRuleId) {
     const ruleId = state.selectedRemoteRuleId;
+    const replacementId = replacementRuleIdAfterDelete('remote', ruleId);
     await fetch(`/api/remote-rules/${ruleId}`, { method: 'DELETE' });
-    if (state.selectedRemoteRuleId === ruleId) {
-      state.selectedRemoteRuleId = null;
-      clearPreview();
-    }
+    await applyDeletedRule('remote', ruleId, { replacementId });
     await reloadRules();
     return;
   }
@@ -16179,8 +17233,95 @@ async function deleteSelectedRule() {
   await deleteRule(state.selectedRuleId);
 }
 
+async function applyDeletedRule(kind, ruleId, options = {}) {
+  if (!ruleId) return;
+  const tabType = rulePreviewTabType(kind);
+  const tabId = previewWorkspaceTabId(tabType, ruleId);
+  const wasSelected = kind === 'remote'
+    ? state.selectedRemoteRuleId === ruleId || state.activePreviewTabId === tabId
+    : state.selectedRuleId === ruleId || state.activePreviewTabId === tabId;
+  const replacementId = options.replacementId ?? replacementRuleIdAfterDelete(kind, ruleId);
+
+  if (kind === 'remote') {
+    state.remoteRules = state.remoteRules.filter((rule) => rule.id !== ruleId);
+  } else {
+    state.rules = state.rules.filter((rule) => rule.id !== ruleId);
+  }
+  removePreviewWorkspaceTab(tabId);
+
+  if (wasSelected) {
+    clearCurrentPreviewSelection();
+    setActiveTab(kind === 'remote' ? 'remote' : 'rules', { autoSelect: false });
+  }
+  renderRules();
+  renderRemoteRules();
+  renderPreviewWorkspaceTabs();
+
+  if (wasSelected && replacementId && ruleExistsForKind(kind, replacementId)) {
+    await selectRuleForKind(kind, replacementId);
+    return;
+  }
+  if (wasSelected) {
+    clearPreview();
+    renderPreviewWorkspaceTabs();
+  }
+}
+
+function replacementRuleIdAfterDelete(kind, ruleId) {
+  const rules = kind === 'remote'
+    ? visibleRemoteRulesForActiveWorkspace()
+    : visibleLocalRulesForActiveWorkspace();
+  const index = rules.findIndex((rule) => rule.id === ruleId);
+  const remaining = rules.filter((rule) => rule.id !== ruleId);
+  if (!remaining.length) return '';
+  if (index < 0) return remaining[0]?.id || '';
+  return (remaining[Math.min(index, remaining.length - 1)] || remaining[remaining.length - 1])?.id || '';
+}
+
+function removePreviewWorkspaceTab(tabId) {
+  if (!tabId || !Array.isArray(state.previewOpenTabs)) return;
+  const wasActive = state.activePreviewTabId === tabId;
+  const beforeLength = state.previewOpenTabs.length;
+  state.previewOpenTabs = state.previewOpenTabs.filter((tab) => tab.id !== tabId);
+  if (beforeLength === state.previewOpenTabs.length) return;
+  if (wasActive) {
+    const pane = livePreviewPane();
+    const key = previewPaneCacheKey(tabId);
+    if (pane && activePreviewPaneCacheKey === key) {
+      pane.remove();
+      activePreviewPaneCacheKey = '';
+    }
+  }
+  removeCachedPreviewPane(tabId);
+  prunePreviewWorkspaceTabHistory();
+  if (wasActive) {
+    state.activePreviewTabId = '';
+  }
+  persistPreviewWorkspaceAndSettings();
+}
+
+function rulePreviewTabType(kind) {
+  return kind === 'remote' ? 'remote' : 'rule';
+}
+
+function ruleExistsForKind(kind, ruleId) {
+  const rules = kind === 'remote' ? state.remoteRules : state.rules;
+  return rules.some((rule) => rule.id === ruleId);
+}
+
+function selectRuleForKind(kind, ruleId) {
+  return kind === 'remote' ? selectRemoteRule(ruleId) : selectRule(ruleId);
+}
+
 function clearPreview() {
+  if (!livePreviewPane()) {
+    ensureFreshPreviewPane('');
+  } else {
+    rebindPreviewPaneElements();
+    bindPreviewPaneEvents();
+  }
   state.selectedCaptureDetail = null;
+  state.selectedRuleId = null;
   state.selectedRemoteRuleId = null;
   state.remoteSteps = [];
   state.selectedAiStepId = '';
@@ -16360,6 +17501,8 @@ function setPreviewBodyTab(tab, options = {}) {
         setBodyTextareaVisible(false);
         updateFormatBodyButton();
         setPreviewMode(state.previewMode);
+        syncCurrentPreviewWorkspaceTabState();
+        persistPreviewWorkspaceAndSettings();
         return;
       }
       els.bodyHighlight.classList.remove('capture-body-delete-editor');
@@ -16373,6 +17516,8 @@ function setPreviewBodyTab(tab, options = {}) {
     renderBodyCodePreview(editorBody, tab);
   }
   setPreviewMode(state.previewMode);
+  syncCurrentPreviewWorkspaceTabState();
+  persistPreviewWorkspaceAndSettings();
 }
 
 function setPreviewMode(mode) {
@@ -16382,18 +17527,10 @@ function setPreviewMode(mode) {
   const isRemote = mode === 'remote';
   const selectedRemote = isRemote ? selectedRemoteRule() : null;
   const isGlobalRemote = isGlobalRemoteRule(selectedRemote);
-  const canCopyCurl = isCapture || isRule || (isRemote && !isGlobalRemote);
   if (!(isRemote && state.previewBodyTab === 'response')) {
     state.selectedAiStepId = '';
     state.selectedDslStepId = '';
   }
-  els.previewTitle.textContent = isCapture
-    ? t('preview.request')
-    : isRule
-      ? t('preview.localEdit')
-      : isRemote
-        ? (isGlobalRemote ? t('preview.globalRemote') : t('preview.remoteEdit'))
-        : t('preview.title');
   els.requestHeadTab.textContent = t('tabs.requestHead');
   els.responseHeadTab.textContent = t('tabs.responseHead');
   els.responseBodyTab.dataset.i18n = isRemote ? 'tabs.modifyRules' : 'tabs.responseBody';
@@ -16428,14 +17565,32 @@ function setPreviewMode(mode) {
   updateRuleOptionEditor();
   updateFormatBodyButton();
   refreshPreviewFindForCurrentTab();
+  updatePreviewChrome();
+  renderRemoteRuleEditorMode();
+  renderRemoteDslRows();
+}
+
+function updatePreviewChrome() {
+  const mode = state.previewMode;
+  const isCapture = mode === 'capture';
+  const isRule = mode === 'rule';
+  const isRemote = mode === 'remote';
+  const selectedRemote = isRemote ? selectedRemoteRule() : null;
+  const isGlobalRemote = isGlobalRemoteRule(selectedRemote);
+  const canCopyCurl = isCapture || isRule || (isRemote && !isGlobalRemote);
+
+  els.previewTitle.textContent = isCapture
+    ? t('preview.request')
+    : isRule
+      ? t('preview.localEdit')
+      : isRemote
+        ? (isGlobalRemote ? t('preview.globalRemote') : t('preview.remoteEdit'))
+        : t('preview.title');
 
   els.localBtn.hidden = !isCapture;
   els.localBtn.disabled = !isCapture;
-  const hasLocalRule = captureHasMatchingLocalRule();
-  els.localBtn.textContent = hasLocalRule ? t('context.updateLocal') : t('context.createLocal');
-  setInstantTooltip(els.localBtn, hasLocalRule
-    ? t('local.updateTip')
-    : t('local.actionTip'));
+  els.localBtn.textContent = t('context.createLocal');
+  setInstantTooltip(els.localBtn, t('local.actionTip'));
 
   els.remoteBtn.hidden = !isCapture;
   els.remoteBtn.disabled = !isCapture;
@@ -16465,8 +17620,6 @@ function setPreviewMode(mode) {
   setInstantTooltip(els.deleteRuleBtn, t('actions.deleteRuleTip'));
   renderDetailNoteButton();
   renderAskAiButton();
-  renderRemoteRuleEditorMode();
-  renderRemoteDslRows();
   refreshEditorTitle();
 }
 
@@ -17286,17 +18439,17 @@ function renderCaptureOverview(data = {}) {
     <div class="capture-overview-table">
       ${rows.map((row) => {
         if (row.type === 'section') {
-          return `<button class="capture-overview-section${row.collapsed ? ' collapsed' : ' expanded'}" type="button" data-overview-section="${escapeHtml(row.id)}" style="--overview-depth:${row.depth || 0}">
+          return `<div class="capture-overview-section${row.collapsed ? ' collapsed' : ' expanded'}" data-overview-section="${escapeHtml(row.id)}" style="--overview-depth:${row.depth || 0}">
             <span class="capture-overview-section-label">
-              <span class="capture-overview-caret" aria-hidden="true">
+              <button class="capture-overview-caret" type="button" aria-label="${escapeHtml(row.collapsed ? t('tree.expand') : t('tree.collapse'))}">
                 <svg viewBox="0 0 16 16" focusable="false">
                   <path d="M6 4L10 8L6 12"/>
                 </svg>
-              </span>
+              </button>
               <span>${escapeHtml(row.label)}</span>
             </span>
             ${row.value ? `<span class="capture-overview-section-value">${escapeHtml(row.value)}</span>` : ''}
-          </button>`;
+          </div>`;
         }
         return `<div class="capture-overview-row" style="--overview-depth:${row.depth || 0}">
           <div class="capture-overview-key">${escapeHtml(row.label)}</div>
@@ -17305,9 +18458,9 @@ function renderCaptureOverview(data = {}) {
       }).join('')}
     </div>
   `;
-  els.captureOverview.querySelectorAll('[data-overview-section]').forEach((button) => {
+  els.captureOverview.querySelectorAll('.capture-overview-caret').forEach((button) => {
     button.addEventListener('click', () => {
-      toggleCaptureOverviewSection(button.dataset.overviewSection);
+      toggleCaptureOverviewSection(button.closest('[data-overview-section]')?.dataset.overviewSection);
     });
   });
 }
@@ -17979,12 +19132,6 @@ function captureHasRequestBodyContent(capture = {}) {
   return Boolean(requestBodyText(capture.requestBody).trim());
 }
 
-function captureHasMatchingLocalRule() {
-  const capture = selectedCaptureForAction();
-  if (!capture) return false;
-  return state.rules.some((rule) => sameLocalRuleTarget(rule, captureRuleTarget(capture, 'local')));
-}
-
 function captureHasMatchingRemoteRule() {
   const capture = selectedCaptureForAction();
   if (!capture) return false;
@@ -18034,7 +19181,7 @@ function sameBaseRuleTarget(a, b) {
 }
 
 function sameRuleCoverageForTarget(rule, target, shouldMatchBody) {
-  return ruleCoversRuleTarget(rule, target, shouldMatchBody) ||
+  return ruleCoversRuleTarget(rule, target, shouldMatchBody) &&
     ruleCoversRuleTarget(target, rule, shouldMatchBody);
 }
 

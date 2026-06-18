@@ -59,18 +59,13 @@ async function bootstrapApp() {
   const dataDir = await ensureUserDataMigrated();
   process.env.LOCAL_DATA_DIR = dataDir;
   nativeTheme.on('updated', () => {
-    if (splashWindow) {
-      splashWindow.setBackgroundColor(splashBackgroundColor());
-    }
-    if (panelWindow && !panelWindow.isDestroyed()) {
-      panelWindow.setBackgroundColor(panelBackgroundColor());
-    }
+    refreshWindowBackgrounds();
   });
 
   try {
     runtimeApi = await import('../src/runtime.js');
     runtimeLoadError = null;
-    await refreshRecordingState();
+    await refreshSavedSettingsState();
     await startUiService();
     await startProxyService();
     setupPowerMonitorHandlers();
@@ -455,7 +450,8 @@ async function startUiService() {
   try {
     await runtimeApi.startRuntime({
       proxy: false,
-      selectProjectDirectory
+      selectProjectDirectory,
+      applyNativeAppearance
     });
     uiStartError = null;
   } catch (error) {
@@ -839,12 +835,13 @@ async function restorePausedDeviceProxies() {
   }
 }
 
-async function refreshRecordingState() {
+async function refreshSavedSettingsState() {
   if (!runtimeApi) return;
   try {
     const { readSettings } = await import('../src/fs-store.js');
     const settings = await readSettings();
     recordingEnabled = settings.recordingEnabled !== false;
+    applyNativeAppearance(settings.appearance);
   } catch (error) {
     console.error(error);
   }
@@ -1006,6 +1003,28 @@ function splashBackgroundColor() {
 
 function panelBackgroundColor() {
   return nativeTheme.shouldUseDarkColors ? '#000000' : '#f8fafd';
+}
+
+function normalizeNativeAppearance(value) {
+  const appearance = String(value || 'system');
+  return ['system', 'light', 'dark'].includes(appearance) ? appearance : 'system';
+}
+
+function applyNativeAppearance(appearance = 'system') {
+  nativeTheme.themeSource = normalizeNativeAppearance(appearance);
+  refreshWindowBackgrounds();
+}
+
+function refreshWindowBackgrounds() {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.setBackgroundColor(splashBackgroundColor());
+  }
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.setBackgroundColor(panelBackgroundColor());
+  }
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.setBackgroundColor(panelBackgroundColor());
+  }
 }
 
 async function closeSplashWindow() {

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import {
   bodyHash,
   normalizeHeaders,
+  orderRulesBySpecificity,
   queryIncludesRequired,
   requestBodyIncludesRequired,
   requestBodyFieldsFromText
@@ -114,7 +115,7 @@ export function orderRemoteRules(remoteRules = []) {
       regular.push(rule);
     }
   }
-  return [...globals, ...regular];
+  return [...globals, ...orderRulesBySpecificity(regular)];
 }
 
 export function remoteRuleTargetKey(rule) {

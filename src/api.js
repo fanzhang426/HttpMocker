@@ -491,6 +491,9 @@ export function createApiServer(runtimeControls = {}) {
       res.json({ settings });
       emitSettingsChanged({ reason: 'settings' });
       const settingsBody = req.body || {};
+      if (Object.hasOwn(settingsBody, 'appearance')) {
+        runtimeControls.applyNativeAppearance?.(settings.appearance);
+      }
       if (Object.hasOwn(settingsBody, 'maxRecentRequests')) {
         await writeCaptures(await readCaptures());
       }
@@ -847,32 +850,6 @@ export function createApiServer(runtimeControls = {}) {
           await writeTextFile(nextRule.filePath, editorBody.body);
         } else {
           await writeBufferFile(nextRule.filePath, Buffer.from(capture.bodyBase64 || '', 'base64'));
-        }
-
-        const existingRule = (state.rules || []).find((item) => sameRuleSaveTarget(item, nextRule));
-        if (existingRule) {
-          const previousPath = existingRule.filePath;
-          const preserved = {
-            id: existingRule.id,
-            createdAt: existingRule.createdAt,
-            enabled: existingRule.enabled,
-            note: existingRule.note || ''
-          };
-          Object.assign(existingRule, nextRule, preserved, {
-            updatedAt: new Date().toISOString()
-          });
-          const warning = enforceDuplicateRuleState(state, existingRule, { edit: true });
-          state.rules = [
-            existingRule,
-            ...(state.rules || []).filter((item) => item.id !== existingRule.id)
-          ];
-          if (previousPath && previousPath !== existingRule.filePath && !state.rules.some((item) => item.filePath === previousPath)) {
-            await deleteLocalFile(previousPath);
-          }
-          return {
-            rule: existingRule,
-            warning
-          };
         }
 
         const duplicateRule = findDuplicateRule(state, nextRule);
@@ -1778,11 +1755,6 @@ function normalizeHostInput(value) {
   }
 }
 
-function sameRuleSaveTarget(existingRule, nextRule) {
-  return sameBaseRuleTarget(existingRule, nextRule) &&
-    sameRuleCoverageForSave(existingRule, nextRule, shouldMatchRuleRequestBodyForSave);
-}
-
 function sameRemoteRuleSaveTarget(existingRule, nextRule) {
   if (existingRule.scope === 'global' || nextRule.scope === 'global') {
     return existingRule.scope === 'global' &&
@@ -1790,7 +1762,7 @@ function sameRemoteRuleSaveTarget(existingRule, nextRule) {
       existingRule.id !== nextRule.id;
   }
   return sameBaseRuleTarget(existingRule, nextRule) &&
-    sameRuleCoverageForSave(existingRule, nextRule, shouldMatchRemoteRuleRequestBodyForSave);
+    sameRuleMatchForSave(existingRule, nextRule, shouldMatchRemoteRuleRequestBodyForSave);
 }
 
 function findDuplicateRule(state, rule, options = {}) {
@@ -1802,6 +1774,7 @@ function findDuplicateRule(state, rule, options = {}) {
   ];
   return rules.find((item) => {
     if (!item || item.id === excludeId) return false;
+    if (item.enabled === false) return false;
     return sameUnifiedRuleSaveTarget(item, rule);
   }) || null;
 }
@@ -1878,7 +1851,7 @@ function validationMethod(baseRule = {}) {
 
 function ruleConflictMessage(rule) {
   const summary = ruleConflictSummary(rule);
-  return `规则匹配范围与「${summary.method} ${summary.host}${summary.path}」存在包含关系，无法保存。`;
+  return `规则匹配范围与「${summary.method} ${summary.host}${summary.path}」完全相同，无法同时启用。`;
 }
 
 function ruleConflictSummary(rule = {}) {
@@ -1926,7 +1899,7 @@ function remoteOrLocalRuleBodyHashKeyForSave(rule = {}) {
 
 function sameUnifiedRuleSaveTarget(existingRule, nextRule) {
   return sameBaseRuleTarget(existingRule, nextRule) &&
-    sameRuleCoverageForSave(existingRule, nextRule, shouldMatchUnifiedRuleRequestBodyForSave);
+    sameRuleMatchForSave(existingRule, nextRule, shouldMatchUnifiedRuleRequestBodyForSave);
 }
 
 function syncRemoteStepsMetadata(rule) {
@@ -1960,6 +1933,11 @@ function sameRuleQueryForSave(existingRule, nextRule) {
 
 function sameRuleCoverageForSave(existingRule, nextRule, shouldMatchBody) {
   return ruleCoversRuleForSave(existingRule, nextRule, shouldMatchBody) ||
+    ruleCoversRuleForSave(nextRule, existingRule, shouldMatchBody);
+}
+
+function sameRuleMatchForSave(existingRule, nextRule, shouldMatchBody) {
+  return ruleCoversRuleForSave(existingRule, nextRule, shouldMatchBody) &&
     ruleCoversRuleForSave(nextRule, existingRule, shouldMatchBody);
 }
 

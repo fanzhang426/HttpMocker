@@ -33,7 +33,8 @@ export async function startUiRuntime() {
     getRuntimeStatus: runtimeStatus,
     startProxyRuntime,
     stopProxyRuntime,
-    selectProjectDirectory: runtimeOptions.selectProjectDirectory
+    selectProjectDirectory: runtimeOptions.selectProjectDirectory,
+    applyNativeAppearance: runtimeOptions.applyNativeAppearance
   });
   const uiServer = await listenUi(app);
   attachTerminalServer(uiServer);
