@@ -4329,10 +4329,13 @@ button.danger-button:hover {
 
 .remote-ai-actions .primary:hover:not(:disabled) {
   border-color: transparent;
-  background-color: transparent;
+  background: transparent;
   color: var(--ai-text);
   background-image: var(--ai-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  box-shadow: none;
 }
 
 .remote-ai-actions .primary:disabled,
