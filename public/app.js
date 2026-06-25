@@ -138,6 +138,8 @@ let draggedPreviewWorkspaceTabId = '';
 let draggedTerminalTabId = '';
 let suppressPreviewWorkspaceTabClick = false;
 let suppressTerminalTabClick = false;
+let pendingTerminalCloseShouldFocusNext = false;
+let activeInstantTooltipTarget = null;
 let previewTextSelectionDrag = null;
 const previewPaneCache = new Map();
 let activePreviewPaneCacheKey = '';
@@ -4823,6 +4825,7 @@ els.workspaceResizer?.addEventListener('keydown', handleWorkspaceResizeKeydown);
 document.addEventListener('mouseover', handleInstantTooltipOver);
 document.addEventListener('mousemove', handleInstantTooltipMove);
 document.addEventListener('mouseout', handleInstantTooltipOut);
+document.addEventListener('pointerdown', hideInstantTooltip, true);
 document.addEventListener('pointerdown', handlePreviewFindOutsidePointerDown, true);
 document.addEventListener('pointerdown', dismissProjectPathGuide, true);
 document.addEventListener('pointerdown', handleAdbProxyGuideOutsidePointerDown, true);
@@ -4942,8 +4945,11 @@ window.addEventListener('contextmenu', (event) => {
   }
 });
 window.addEventListener('resize', closeItemContextMenu);
+window.addEventListener('resize', hideInstantTooltip);
+window.addEventListener('blur', hideInstantTooltip);
 window.addEventListener('resize', clampWorkspaceSplit);
 window.addEventListener('scroll', closeItemContextMenu, true);
+window.addEventListener('scroll', hideInstantTooltip, true);
 
 function toggleAiSelectorMenu() {
   els.aiSelectorMenu.hidden = !els.aiSelectorMenu.hidden;
@@ -5031,31 +5037,50 @@ function positionItemContextMenu(event) {
   els.itemContextMenu.style.top = `${top}px`;
 }
 
-function tooltipTextForElement(element) {
+function tooltipTargetForElement(element) {
   convertTitleToInstantTooltip(element);
   const target = element?.closest?.('[data-tooltip]');
+  return target?.dataset?.tooltip ? target : null;
+}
+
+function tooltipTextForElement(element) {
+  const target = tooltipTargetForElement(element);
   if (target?.dataset?.tooltip) return target.dataset.tooltip;
   return '';
 }
 
 function handleInstantTooltipOver(event) {
-  const text = tooltipTextForElement(event.target);
+  const target = tooltipTargetForElement(event.target);
+  const text = target?.dataset?.tooltip || '';
   if (!text) return;
-  showInstantTooltip(text, event);
+  showInstantTooltip(text, event, target);
 }
 
 function handleInstantTooltipMove(event) {
   if (!els.instantTooltip || els.instantTooltip.hidden) return;
+  const target = tooltipTargetForElement(event.target);
+  const text = target?.dataset?.tooltip || '';
+  if (!target || !text) {
+    hideInstantTooltip();
+    return;
+  }
+  if (target !== activeInstantTooltipTarget || text !== els.instantTooltip.textContent) {
+    showInstantTooltip(text, event, target);
+    return;
+  }
   positionInstantTooltip(event);
 }
 
 function handleInstantTooltipOut(event) {
-  if (!tooltipTextForElement(event.target)) return;
+  const target = tooltipTargetForElement(event.target);
+  if (!target || target !== activeInstantTooltipTarget) return;
+  if (event.relatedTarget && target.contains(event.relatedTarget)) return;
   hideInstantTooltip();
 }
 
-function showInstantTooltip(text, event) {
+function showInstantTooltip(text, event, target = null) {
   if (!els.instantTooltip) return;
+  activeInstantTooltipTarget = target;
   els.instantTooltip.textContent = text;
   els.instantTooltip.hidden = false;
   positionInstantTooltip(event);
@@ -5082,6 +5107,7 @@ function positionInstantTooltip(event) {
 
 function hideInstantTooltip() {
   if (!els.instantTooltip) return;
+  activeInstantTooltipTarget = null;
   els.instantTooltip.classList.remove('visible');
   els.instantTooltip.hidden = true;
 }
@@ -5574,15 +5600,20 @@ async function initSettingsWindow() {
 function setupInstantTooltips() {
   convertTitleToInstantTooltip(document.body);
   const observer = new MutationObserver((mutations) => {
+    let shouldValidateActiveTooltip = false;
     for (const mutation of mutations) {
       if (mutation.type === 'attributes') {
         convertTitleToInstantTooltip(mutation.target);
+        shouldValidateActiveTooltip = shouldValidateActiveTooltip ||
+          mutation.target === activeInstantTooltipTarget;
         continue;
       }
       for (const node of mutation.addedNodes) {
         convertTitleToInstantTooltip(node);
       }
+      if (mutation.removedNodes.length) shouldValidateActiveTooltip = true;
     }
+    if (shouldValidateActiveTooltip) validateActiveInstantTooltip();
   });
   observer.observe(document.body, {
     subtree: true,
@@ -5590,6 +5621,13 @@ function setupInstantTooltips() {
     attributes: true,
     attributeFilter: ['title']
   });
+}
+
+function validateActiveInstantTooltip() {
+  if (!activeInstantTooltipTarget) return;
+  if (!activeInstantTooltipTarget.isConnected || !activeInstantTooltipTarget.dataset?.tooltip) {
+    hideInstantTooltip();
+  }
 }
 
 function normalizeLanguage(value) {
@@ -5883,7 +5921,11 @@ function renderTerminalTabs() {
       `;
     }
     button.addEventListener('pointerdown', (event) => {
-      if (event.target.closest('.terminal-tab-close, .terminal-tab-rename')) return;
+      if (event.target.closest('.terminal-tab-close')) {
+        pendingTerminalCloseShouldFocusNext = terminalBodyHasFocus();
+        return;
+      }
+      if (event.target.closest('.terminal-tab-rename')) return;
       if (event.button === 2) closeItemContextMenu();
     });
     button.addEventListener('contextmenu', (event) => {
@@ -5901,7 +5943,9 @@ function renderTerminalTabs() {
       }
       if (event.target.closest('.terminal-tab-rename')) return;
       if (event.target.closest('.terminal-tab-close')) {
-        closeTerminalTab(terminalTab.id);
+        const focusNextTerminal = pendingTerminalCloseShouldFocusNext || terminalBodyHasFocus();
+        pendingTerminalCloseShouldFocusNext = false;
+        closeTerminalTab(terminalTab.id, { focusNextTerminal });
         return;
       }
       selectTerminalTab(terminalTab.id);
@@ -6144,11 +6188,12 @@ function cancelTerminalTabRename() {
   renderTerminalTabs();
 }
 
-async function closeTerminalTab(tabId) {
+async function closeTerminalTab(tabId, options = {}) {
   rememberWorkspaceFocus('terminal');
   const terminalState = ensureActiveTerminalState();
   const index = terminalState.tabs.findIndex((item) => item.id === tabId);
   if (index < 0) return;
+  const shouldFocusNextTerminal = options.focusNextTerminal === true || terminalBodyHasFocus();
   if (terminalRenamingTabId === tabId) terminalRenamingTabId = '';
   disposeTerminalInstance(terminalInstanceKey(tabId));
   terminalState.tabs.splice(index, 1);
@@ -6170,9 +6215,22 @@ async function closeTerminalTab(tabId) {
   renderTerminalTabs();
   scheduleSettingsSave();
   if (terminalState.open) {
-    await ensureTerminalForActiveProject();
-    restoreTerminalTabFocus();
+    const instance = await ensureTerminalForActiveProject();
+    if (shouldFocusNextTerminal) {
+      window.requestAnimationFrame(() => {
+        instance?.xterm?.focus();
+      });
+    } else {
+      restoreTerminalTabFocus();
+    }
   }
+}
+
+function terminalBodyHasFocus() {
+  const active = document.activeElement;
+  if (!active || active === document.body) return false;
+  if (active.closest?.('.terminal-xterm')) return true;
+  return Boolean(activeTerminalInstance?.container?.contains?.(active));
 }
 
 function hideAllTerminalInstances() {
@@ -15522,6 +15580,7 @@ function isTextEntryElement(element) {
   const tag = element.tagName?.toLowerCase();
   if (tag === 'textarea') return true;
   if (tag === 'input') return true;
+  if (tag === 'select') return true;
   if (element.isContentEditable) return true;
   return false;
 }
